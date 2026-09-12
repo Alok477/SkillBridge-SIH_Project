@@ -1,0 +1,110 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 5rem;
+  }
+
+  body {
+    @apply bg-background font-sans text-zinc-100;
+    min-height: 100vh;
+    overflow-x: hidden;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
+
+  /* Custom subtle scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #27272a; /* Zinc 800 */
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #3f3f46; /* Zinc 700 */
+  }
+}
+
+/* Premium micro-interactions & utility classes */
+.glass-card {
+  background: rgba(18, 18, 20, 0.6);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.glow-hover {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glow-hover:hover {
+  border-color: rgba(59, 130, 246, 0.4);
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.1);
+}
+
+.landing-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.landing-content > section:nth-child(1) { order: 3; }
+.landing-content > section:nth-child(2) { order: 1; }
+.landing-content > section:nth-child(3) { order: 2; }
+.landing-content > section:nth-child(4) { order: 7; }
+.landing-content > section:nth-child(5) { order: 4; }
+.landing-content > section:nth-child(6) { order: 5; }
+.landing-content > section:nth-child(7) { order: 6; }
+.landing-content > section:nth-child(8) { display: none; }
+.landing-content > section:nth-child(9) { order: 8; }
+.landing-content > section:nth-child(10) { display: none; }
+.landing-content > section:nth-child(11) { order: 10; }
+.landing-content > section:nth-child(12) { order: 11; }
+
+.landing-content > section:nth-child(11) button:first-child {
+  background-color: #ffffff;
+  color: #2563eb;
+}
+
+.landing-content > section:nth-child(11) button:first-child:hover {
+  background-color: #eff6ff;
+  color: #1d4ed8;
+}
+
+.landing-content > section:nth-child(11) button:last-child {
+  border-color: rgba(255, 255, 255, 0.4);
+  color: #ffffff;
+}
+
+.landing-content > section:nth-child(11) button:last-child:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+/* Page transitions */
+.fade-in {
+  animation: fadeIn 0.4s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
