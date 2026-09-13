@@ -69,7 +69,7 @@ function App() {
               path="/student/dashboard" 
               element={
                 <ProtectedRoute allowedRole="student">
-                  <StudentDashboard />
+                  <StudentPortfolio />
                 </ProtectedRoute>
               } 
             />

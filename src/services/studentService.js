@@ -45,13 +45,26 @@ export const studentService = {
     return { durationMinutes: 30, questions: selectedQuestions };
   },
 
-  submitAssessment: async (answers, activeQuestions) => {
+  startAssessment: (questionCount) => apiRequest(`/api/assessments/start?question_count=${questionCount}`, {
+    method: 'POST',
+  }),
+
+  submitAssessment: async (answers, activeQuestions, attemptId, domain = 'All') => {
     const questions = activeQuestions || [];
     let correctCount = 0;
+    const categoryScores = {};
     questions.forEach((question) => {
       if (answers[question.id] === question.correctAnswerIndex) correctCount += 1;
+      const category = question.category || 'General';
+      if (!categoryScores[category]) categoryScores[category] = { correct: 0, total: 0 };
+      categoryScores[category].total += 1;
+      if (answers[question.id] === question.correctAnswerIndex) categoryScores[category].correct += 1;
     });
     const scorePct = questions.length ? Math.round((correctCount / questions.length) * 100) : 0;
+    const skillScores = Object.fromEntries(Object.entries(categoryScores).map(([category, result]) => [
+      category,
+      result.total ? Math.round((result.correct / result.total) * 100) : 0,
+    ]));
     const feedback = {
       score: scorePct,
       correctCount,
@@ -60,17 +73,21 @@ export const studentService = {
       weakAreas: scorePct < 100 ? ['Testing architectures', 'API boundary handling'] : [],
       recommendedSkills: scorePct < 75 ? ['React', 'JavaScript', 'Testing (Jest/Cypress)'] : ['Testing (Jest/Cypress)'],
       careerReadiness: scorePct,
+      skillScores,
     };
 
     await apiRequest('/api/assessments', {
       method: 'POST',
       body: JSON.stringify({
+        attempt_id: attemptId,
         score: scorePct,
         correct_count: correctCount,
         total_count: questions.length,
         strengths: feedback.strengths,
         weak_areas: feedback.weakAreas,
         recommended_skills: feedback.recommendedSkills,
+        skill_scores: skillScores,
+        domain,
       }),
     });
     return feedback;

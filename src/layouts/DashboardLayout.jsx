@@ -2,14 +2,13 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
-  Menu, X, Bell, LogOut, ChevronRight, User, Settings,
+  Menu, X, LogOut, ChevronRight, User, Settings,
   LayoutDashboard, BookOpen, UserCheck, Compass, Briefcase, 
   FileText, Award, Calendar, BarChart2, Users, GitFork, 
   Share2, HelpCircle
 } from 'lucide-react';
 import { Badge } from '../components/ui/Badge';
 import { Avatar } from '../components/ui/Avatar';
-import { NOTIFICATIONS } from '../data/mockData';
 import { Logo } from '../components/ui/Logo';
 
 export const DashboardLayout = ({ children }) => {
@@ -18,9 +17,7 @@ export const DashboardLayout = ({ children }) => {
   const location = useLocation();
   
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [notifDropdownOpen, setNotifDropdownOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
-  const [unreadNotifs, setUnreadNotifs] = useState(NOTIFICATIONS.filter(n => !n.read).length);
   const contentRef = useRef(null);
 
   useEffect(() => {
@@ -37,13 +34,12 @@ export const DashboardLayout = ({ children }) => {
     switch (user?.role) {
       case 'student':
         return [
-          { label: 'Overview', path: '/student/dashboard', icon: LayoutDashboard },
+          { label: 'Portfolio', path: '/student/portfolio', icon: Award },
           { label: 'Skill Assessment', path: '/student/assessment', icon: BookOpen },
           { label: 'Skill Profile', path: '/student/skills', icon: UserCheck },
           { label: 'Career Path', path: '/student/career', icon: Compass },
           { label: 'Opportunities', path: '/student/opportunities', icon: Briefcase },
-          { label: 'Applications', path: '/student/applications', icon: FileText },
-          { label: 'Portfolio', path: '/student/portfolio', icon: Award }
+          { label: 'Applications', path: '/student/applications', icon: FileText }
         ];
       case 'industry':
         return [
@@ -85,7 +81,7 @@ export const DashboardLayout = ({ children }) => {
         <div className="flex flex-col flex-grow">
           {/* Sidebar Header */}
           <div className="h-16 flex items-center justify-between px-6 border-b border-zinc-800/60">
-            <Link to={user ? `/${user.role}/dashboard` : '/'} className="flex items-center gap-2" aria-label="Go to dashboard">
+            <Link to={user?.role === 'student' ? '/student/portfolio' : (user ? `/${user.role}/dashboard` : '/')} className="flex items-center gap-2" aria-label="Go to dashboard">
               <Logo />
             </Link>
             <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-zinc-400 hover:text-white transition-colors">
@@ -152,52 +148,10 @@ export const DashboardLayout = ({ children }) => {
           </div>
 
           <div className="flex items-center gap-4">
-            {/* Notification center */}
-            <div className="relative">
-              <button 
-                onClick={() => { setNotifDropdownOpen(!notifDropdownOpen); setProfileDropdownOpen(false); }}
-                className="relative text-zinc-400 hover:text-white p-2 rounded-md hover:bg-zinc-800/30 transition-colors"
-              >
-                <Bell className="w-5 h-5" />
-                {unreadNotifs > 0 && (
-                  <span className="absolute top-1 right-1.5 w-2 h-2 rounded-full bg-accent-red" />
-                )}
-              </button>
-
-              {/* Notification Dropdown */}
-              {notifDropdownOpen && (
-                <div className="absolute right-0 mt-2.5 w-80 bg-[#121214] border border-zinc-800 rounded-xl shadow-2xl overflow-hidden animate-[slideIn_0.15s_ease-out_forwards]">
-                  <div className="px-4 py-3 border-b border-zinc-800/60 flex justify-between items-center bg-zinc-800/10">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Notifications</span>
-                    <button 
-                      onClick={() => setUnreadNotifs(0)}
-                      className="text-[10px] text-brand hover:underline font-medium"
-                    >
-                      Mark all read
-                    </button>
-                  </div>
-                  <div className="divide-y divide-zinc-800/50 max-h-80 overflow-y-auto">
-                    {NOTIFICATIONS.map((n) => (
-                      <div key={n.id} className="p-3.5 hover:bg-zinc-800/20 transition-colors">
-                        <div className="flex justify-between items-start gap-2 mb-1">
-                          <span className="text-xs font-semibold text-zinc-200">{n.title}</span>
-                          <span className="text-[10px] text-zinc-500 whitespace-nowrap">{n.time}</span>
-                        </div>
-                        <p className="text-xs text-zinc-400 leading-relaxed">{n.message}</p>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="px-4 py-2 border-t border-zinc-800/60 bg-zinc-800/10 text-center">
-                    <span className="text-[10px] text-zinc-500 font-medium cursor-pointer hover:text-white">View active dashboard logs</span>
-                  </div>
-                </div>
-              )}
-            </div>
-
             {/* Profile actions drop */}
             <div className="relative">
               <button 
-                onClick={() => { setProfileDropdownOpen(!profileDropdownOpen); setNotifDropdownOpen(false); }}
+                onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
                 className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-zinc-800/30 transition-all border border-transparent hover:border-zinc-800/60"
               >
                 <Avatar name={user?.name} sizeClass="w-8 h-8 text-[11px]" />
@@ -207,7 +161,7 @@ export const DashboardLayout = ({ children }) => {
               {profileDropdownOpen && (
                 <div className="absolute right-0 mt-2.5 w-48 bg-[#121214] border border-zinc-800 rounded-xl shadow-2xl overflow-hidden py-1 z-30 animate-[slideIn_0.15s_ease-out_forwards]">
                   <Link 
-                    to={`/${user?.role}/dashboard`}
+                    to={user?.role === 'student' ? '/student/portfolio' : `/${user?.role}/dashboard`}
                     onClick={() => setProfileDropdownOpen(false)}
                     className="flex items-center gap-2 px-4 py-2.5 text-xs font-medium text-zinc-300 hover:text-white hover:bg-zinc-800/30 transition-colors"
                   >

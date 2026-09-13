@@ -9,7 +9,17 @@ export const apiRequest = async (path, options = {}) => {
     ...(options.headers || {}),
   };
 
-  const response = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  let response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  } catch (error) {
+    const networkError = new Error(
+      `Unable to reach the SkillBridge API at ${API_BASE}. Start the backend and verify its database configuration.`
+    );
+    networkError.cause = error;
+    networkError.isNetworkError = true;
+    throw networkError;
+  }
   const contentType = response.headers.get('content-type') || '';
   const data = contentType.includes('application/json') ? await response.json() : null;
 

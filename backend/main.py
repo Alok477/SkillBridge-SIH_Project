@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Optional
 from uuid import uuid4
 
@@ -80,12 +80,15 @@ class ProfileUpdateRequest(BaseModel):
 
 
 class AssessmentSubmitRequest(BaseModel):
+    attempt_id: Optional[str] = None
+    domain: str = 'All'
     score: int = Field(..., ge=0, le=100)
     correct_count: int = Field(..., ge=0)
     total_count: int = Field(..., ge=1)
     strengths: list[str] = []
     weak_areas: list[str] = []
     recommended_skills: list[str] = []
+    skill_scores: dict[str, int] = {}
 
 
 class CandidateStatusRequest(BaseModel):
@@ -168,26 +171,52 @@ def as_list(value, fallback=None):
 
 
 def skill_names(profile: dict[str, Any]) -> set[str]:
+    aliases = {
+        'sql databases': 'sql', 'mysql': 'sql', 'postgresql': 'sql',
+        'html/css': 'html', 'html5/css3': 'html', 'jest/cypress': 'testing',
+        'testing (jest/cypress)': 'testing', 'rest api': 'rest apis', 'api development': 'rest apis',
+    }
     result = set()
     skills = profile.get('skills') or {}
     for group in ('technical', 'soft'):
         for skill in skills.get(group, []) if isinstance(skills.get(group), list) else []:
             if isinstance(skill, dict) and skill.get('name'):
-                result.add(skill['name'].strip().lower())
+                normalized = skill['name'].strip().lower()
+                result.add(aliases.get(normalized, normalized))
             elif isinstance(skill, str):
-                result.add(skill.strip().lower())
+                normalized = skill.strip().lower()
+                result.add(aliases.get(normalized, normalized))
     return result
 
 
+def match_details(profile: dict[str, Any], required_skills: list[str]) -> dict[str, Any]:
+    aliases = {'sql databases': 'sql', 'mysql': 'sql', 'postgresql': 'sql', 'testing (jest/cypress)': 'testing', 'jest/cypress': 'testing'}
+    required_names = [str(skill).strip() for skill in required_skills if str(skill).strip()]
+    required = {aliases.get(skill.lower(), skill.lower()) for skill in required_names}
+    available = skill_names(profile)
+    matched = [name for name in required_names if aliases.get(name.lower(), name.lower()) in available]
+    missing = [name for name in required_names if aliases.get(name.lower(), name.lower()) not in available]
+    assessment = 0
+    career_path = profile.get('careerPath') or {}
+    if profile.get('assessmentHistory'):
+        assessment = int(profile['assessmentHistory'][-1].get('score', 0))
+    else:
+        assessment = int(career_path.get('readiness', 0) or 0)
+    skill_score = round((len(required & available) / len(required)) * 100) if required else 0
+    return {
+        'score': round(skill_score * 0.7 + assessment * 0.3) if required else assessment,
+        'matchedSkills': matched,
+        'missingSkills': missing,
+        'assessmentScore': assessment,
+        'recommendations': [f'Build evidence for {skill}' for skill in missing[:3]],
+    }
+
+
 def calculate_match(profile: dict[str, Any], required_skills: list[str]) -> int:
-    required = {str(s).strip().lower() for s in required_skills if str(s).strip()}
-    if not required:
-        return 0
-    matched = len(required & skill_names(profile))
-    return round((matched / len(required)) * 100)
+    return match_details(profile, required_skills)['score']
 
 
-def opportunity_response(item: Opportunity, match_score: int = 0) -> dict:
+def opportunity_response(item: Opportunity, match_score: int = 0, details: Optional[dict] = None) -> dict:
     return {
         'id': str(item.id),
         'title': item.title,
@@ -202,6 +231,7 @@ def opportunity_response(item: Opportunity, match_score: int = 0) -> dict:
         'postedDate': item.created_at.strftime('%b %d, %Y') if item.created_at else 'Just now',
         'deadline': item.deadline or 'Open',
         'matchScore': match_score,
+        'matchDetails': details or {},
     }
 
 
@@ -301,8 +331,32 @@ def logout():
 
 
 @app.get('/api/profile')
-def get_profile(user: User = Depends(get_current_user)):
-    return merged_profile(user)
+def get_profile(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    profile = merged_profile(user)
+    if user.role == 'industry':
+        opportunities = db.query(Opportunity).filter(Opportunity.created_by == user.id).all()
+        opportunity_ids = [opportunity.id for opportunity in opportunities]
+        applications = db.query(Application).filter(Application.opportunity_id.in_(opportunity_ids)).all() if opportunity_ids else []
+        shortlist_count = db.query(CandidateStatus).filter(
+            CandidateStatus.industry_id == user.id,
+            CandidateStatus.status == 'Shortlisted',
+        ).count()
+        scores = [application.match_score for application in applications]
+        profile.update({
+            'activePostingsCount': len(opportunities),
+            'totalApplicantsCount': len(applications),
+            'shortlistedCount': shortlist_count,
+            'averageMatchScore': round(sum(scores) / len(scores)) if scores else 0,
+        })
+    elif user.role == 'institution':
+        students = db.query(User).filter(User.role == 'student').all()
+        scores = [merged_profile(student).get('careerPath', {}).get('readiness', 0) for student in students]
+        profile.update({
+            'totalStudentsCount': len(students),
+            'assessedStudentsCount': sum(1 for student in students if merged_profile(student).get('assessmentCompleted')),
+            'averageSkillScore': round(sum(scores) / len(scores), 1) if scores else 0,
+        })
+    return profile
 
 
 @app.put('/api/profile')
@@ -320,15 +374,61 @@ def update_profile(body: ProfileUpdateRequest, db: Session = Depends(get_db), us
 
 @app.post('/api/assessments')
 def submit_assessment(body: AssessmentSubmitRequest, db: Session = Depends(get_db), user: User = Depends(require_role('student'))):
+    profile = merged_profile(user)
+    active_attempt = profile.get('activeAssessment') or {}
+    if body.attempt_id and active_attempt.get('id') != body.attempt_id:
+        raise HTTPException(status_code=409, detail='This assessment attempt is no longer active.')
+    if active_attempt.get('expiresAt') and datetime.utcnow() > datetime.fromisoformat(active_attempt['expiresAt']):
+        raise HTTPException(status_code=408, detail='Assessment time expired. Please start a new attempt.')
     result = AssessmentResult(
         id=str(uuid4()), student_id=user.id, score=body.score, correct_count=body.correct_count,
         total_count=body.total_count, strengths=body.strengths, weak_areas=body.weak_areas,
         recommended_skills=body.recommended_skills,
     )
     db.add(result)
-    profile = merged_profile(user)
     profile['assessmentCompleted'] = True
+    profile.pop('activeAssessment', None)
+    profile.setdefault('assessmentHistory', []).append({
+        'id': str(uuid4()), 'score': body.score, 'correctCount': body.correct_count,
+        'totalCount': body.total_count, 'strengths': body.strengths,
+        'weakAreas': body.weak_areas, 'recommendedSkills': body.recommended_skills,
+        'skillScores': body.skill_scores,
+        'domain': body.domain,
+        'createdAt': datetime.utcnow().isoformat(),
+    })
     profile.setdefault('careerPath', {})['readiness'] = body.score
+    skills = profile.setdefault('skills', {})
+    technical = skills.get('technical') if isinstance(skills.get('technical'), list) else []
+    category_scores = {str(category).strip().lower(): max(0, min(100, int(score))) for category, score in body.skill_scores.items()}
+    for skill in technical:
+        if not isinstance(skill, dict) or not skill.get('name'):
+            continue
+        name = str(skill['name']).strip().lower()
+        category = str(skill.get('category') or '').strip().lower()
+        assessment_score = next(
+            (score for label, score in category_scores.items() if label in name or label in category or name in label),
+            None,
+        )
+        if assessment_score is not None:
+            manual_score = max(0, min(100, int(skill.get('current', 0))))
+            skill['assessmentScore'] = assessment_score
+            skill['current'] = round((manual_score + assessment_score) / 2)
+    existing_names = {
+        str(skill.get('name')).strip().lower()
+        for skill in technical
+        if isinstance(skill, dict) and skill.get('name')
+    }
+    for category, assessment_score in category_scores.items():
+        if category not in existing_names:
+            technical.append({
+                'name': category.title(),
+                'category': 'Technical',
+                'current': assessment_score,
+                'target': 90,
+                'required': 75,
+                'assessmentScore': assessment_score,
+            })
+    skills['technical'] = technical
     profile['careerPath']['acquiredSkillsCount'] = sum(
         1 for skill in profile.get('skills', {}).get('technical', [])
         if isinstance(skill, dict) and skill.get('current', 0) >= skill.get('required', 0)
@@ -339,8 +439,27 @@ def submit_assessment(body: AssessmentSubmitRequest, db: Session = Depends(get_d
     return {
         'score': body.score, 'correctCount': body.correct_count, 'totalCount': body.total_count,
         'strengths': body.strengths, 'weakAreas': body.weak_areas, 'recommendedSkills': body.recommended_skills,
+        'skillScores': body.skill_scores,
+        'domain': body.domain,
         'careerReadiness': body.score,
     }
+
+
+@app.post('/api/assessments/start')
+def start_assessment(question_count: int = 1, db: Session = Depends(get_db), user: User = Depends(require_role('student'))):
+    question_count = max(1, min(question_count, 100))
+    started_at = datetime.utcnow()
+    attempt = {
+        'id': str(uuid4()),
+        'startedAt': started_at.isoformat(),
+        'expiresAt': (started_at + timedelta(seconds=question_count * 30)).isoformat(),
+        'questionCount': question_count,
+    }
+    profile = merged_profile(user)
+    profile['activeAssessment'] = attempt
+    user.profile_data = {k: v for k, v in profile.items() if k not in {'name', 'email', 'role', 'avatar'}}
+    db.commit()
+    return attempt
 
 
 @app.get('/api/assessments/latest')
@@ -359,7 +478,11 @@ def latest_assessment(db: Session = Depends(get_db), user: User = Depends(requir
 def get_opportunities(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     opportunities = db.query(Opportunity).order_by(Opportunity.created_at.desc()).all()
     profile = merged_profile(user)
-    return [opportunity_response(o, calculate_match(profile, o.required_skills or [])) for o in opportunities]
+    rows = []
+    for opportunity in opportunities:
+        details = match_details(profile, opportunity.required_skills or [])
+        rows.append(opportunity_response(opportunity, details['score'], details))
+    return sorted(rows, key=lambda item: item['matchScore'], reverse=True)
 
 
 @app.post('/api/opportunities')
@@ -439,6 +562,19 @@ def get_candidates(db: Session = Depends(get_db), industry: User = Depends(requi
             'interest': profile.get('careerPath', {}).get('role', 'Career interest not set'),
             'status': status_row.status if status_row else 'None',
             'avatar': profile.get('avatar') or DEFAULT_AVATAR,
+            'profile': {
+                'email': profile.get('email'),
+                'department': profile.get('department'),
+                'graduationYear': profile.get('graduationYear'),
+                'careerPath': profile.get('careerPath') or {},
+                'skills': profile.get('skills') or {'technical': [], 'soft': []},
+                'assessmentHistory': profile.get('assessmentHistory') or [],
+                'education': profile.get('education') or [],
+                'projects': profile.get('projects') or [],
+                'certifications': profile.get('certifications') or [],
+                'languages': profile.get('languages') or [],
+                'resume': profile.get('resume'),
+            },
         })
     result.sort(key=lambda item: item['matchScore'], reverse=True)
     return result

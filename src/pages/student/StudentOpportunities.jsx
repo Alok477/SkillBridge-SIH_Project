@@ -9,7 +9,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Input } from '../../components/ui/Input';
 import { 
   Search, MapPin, DollarSign, Calendar, 
-  ArrowRight, ShieldCheck, CheckCircle2, Star 
+  ArrowRight, ShieldCheck, CheckCircle2, Star, TrendingUp, AlertTriangle
 } from 'lucide-react';
 
 export const StudentOpportunities = () => {
@@ -251,6 +251,30 @@ export const StudentOpportunities = () => {
                   <h4 className="text-xs font-semibold text-zinc-400 tracking-wide uppercase">Opportunity Overview</h4>
                   <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed font-normal">{selectedOpp.description || 'No description provided.'}</p>
                 </div>
+
+                {/* Match explanation */}
+                {selectedOpp.matchDetails && (
+                  <div className="space-y-4 rounded-xl border border-brand/20 bg-brand/5 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-zinc-300">
+                        <TrendingUp className="h-4 w-4 text-brand" /> Why this matches
+                      </h4>
+                      <span className="text-xs font-bold text-brand">{selectedOpp.matchDetails.assessmentScore || 0}% assessment</span>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <p className="mb-2 text-[10px] font-semibold uppercase text-accent-green">Matched skills</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {(selectedOpp.matchDetails.matchedSkills || []).length ? selectedOpp.matchDetails.matchedSkills.map(skill => <Badge key={skill} variant="success">{skill}</Badge>) : <span className="text-xs text-zinc-500">Add skills to improve this match.</span>}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="mb-2 text-[10px] font-semibold uppercase text-accent-amber">Recommended next steps</p>
+                        {(selectedOpp.matchDetails.recommendations || []).length ? <ul className="space-y-1 text-xs text-zinc-400">{selectedOpp.matchDetails.recommendations.map(item => <li key={item} className="flex gap-1.5"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-amber" />{item}</li>)}</ul> : <span className="text-xs text-accent-green">Your current profile covers the listed skills.</span>}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Requirements & Responsibilities */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-2">

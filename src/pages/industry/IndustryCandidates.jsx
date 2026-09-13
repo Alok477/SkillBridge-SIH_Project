@@ -8,8 +8,10 @@ import { Badge } from '../../components/ui/Badge';
 import { Avatar } from '../../components/ui/Avatar';
 import { 
   Users, CheckCircle2, AlertTriangle, UserCheck, 
-  ExternalLink, GraduationCap, FileCheck, X 
+  ExternalLink, GraduationCap, FileCheck, FileText, X 
 } from 'lucide-react';
+
+const externalUrl = value => value && (/^https?:\/\//i.test(value) ? value : `https://${value}`);
 
 export const IndustryCandidates = () => {
   const { addToast } = useToast();
@@ -140,7 +142,7 @@ export const IndustryCandidates = () => {
       {/* Candidate comparison overlay drawer/modal */}
       {selectedCandidate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg bg-[#121214] border border-zinc-800 rounded-2xl shadow-2xl p-6 sm:p-8 space-y-6 animate-[slideIn_0.2s_ease-out_forwards]">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-[#121214] border border-zinc-800 rounded-2xl shadow-2xl p-6 sm:p-8 space-y-6 animate-[slideIn_0.2s_ease-out_forwards]">
             
             {/* Header info */}
             <div className="flex justify-between items-start gap-4">
@@ -176,6 +178,45 @@ export const IndustryCandidates = () => {
             <div className="space-y-1.5 text-xs">
               <span className="text-[10px] text-zinc-500 font-semibold uppercase block">Career Pathway Interest</span>
               <span className="text-white font-medium block">{selectedCandidate.interest}</span>
+            </div>
+
+            <div className="space-y-4 border-t border-zinc-800/60 pt-4">
+              <div className="flex items-center justify-between">
+                <div><span className="text-[10px] text-zinc-500 font-semibold uppercase">Skill profile</span><p className="mt-1 text-xs text-zinc-500">Assessment-driven competency levels and skill gaps.</p></div>
+                <Badge variant="brand">{selectedCandidate.profile?.careerPath?.readiness || 0}% readiness</Badge>
+              </div>
+              <div className="space-y-3">
+                {[...(selectedCandidate.profile?.skills?.technical || []), ...(selectedCandidate.profile?.skills?.soft || [])].length ? [...(selectedCandidate.profile?.skills?.technical || []), ...(selectedCandidate.profile?.skills?.soft || [])].map((skill, index) => {
+                  const current = Math.max(0, Math.min(100, Number(skill?.current ?? 0)));
+                  const required = Math.max(0, Math.min(100, Number(skill?.required ?? 75)));
+                  const gap = Math.max(0, required - current);
+                  return <div key={`${skill?.name || skill}-${index}`}><div className="mb-1 flex items-center justify-between gap-3 text-xs"><span className="font-semibold text-zinc-200">{skill?.name || skill}<span className="ml-2 text-[10px] font-normal text-zinc-500">{skill?.category || 'Skill'}</span></span><span className="text-zinc-400">{current}%{skill?.assessmentScore != null ? ` · Test ${skill.assessmentScore}%` : ''}</span></div><div className="relative h-2 overflow-hidden rounded-full bg-zinc-800"><div className={`h-full rounded-full ${gap ? 'bg-brand' : 'bg-accent-green'}`} style={{ width: `${current}%` }} /><span className="absolute top-0 h-2 w-0.5 bg-zinc-400" style={{ left: `${required}%` }} title={`Required: ${required}%`} /></div>{gap > 0 && <span className="mt-1 block text-[10px] text-accent-amber">Gap: {gap}% to required level</span>}</div>;
+                }) : <p className="text-xs text-zinc-500">No mapped skills available.</p>}
+              </div>
+              {Object.keys((selectedCandidate.profile?.assessmentHistory || []).reduce((scores, attempt) => { Object.entries(attempt.skillScores || {}).forEach(([domain, score]) => { if (!scores[domain]) scores[domain] = []; scores[domain].push(Number(score)); }); return scores; }, {})).length > 0 && <div className="border-t border-zinc-800 pt-3"><span className="text-[10px] font-semibold uppercase text-zinc-500">Tested domains</span><div className="mt-2 flex flex-wrap gap-2">{Object.entries((selectedCandidate.profile?.assessmentHistory || []).reduce((scores, attempt) => { Object.entries(attempt.skillScores || {}).forEach(([domain, score]) => { if (!scores[domain]) scores[domain] = []; scores[domain].push(Number(score)); }); return scores; }, {})).map(([domain, scores]) => <span key={domain} className="rounded-full border border-violet-400/20 bg-violet-400/10 px-2 py-1 text-[10px] text-violet-200">{domain}: {Math.round(scores.reduce((total, score) => total + score, 0) / scores.length)}%</span>)}</div></div>}
+            </div>
+
+            <div className="space-y-4 border-t border-zinc-800/60 pt-4">
+              <div>
+                <span className="text-[10px] text-zinc-500 font-semibold uppercase">Student profile</span>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  <div className="rounded-lg bg-zinc-900/60 p-3"><span className="block text-[10px] text-zinc-500">Email</span><span className="mt-1 block break-all text-xs text-zinc-200">{selectedCandidate.profile?.email || 'Not provided'}</span></div>
+                  <div className="rounded-lg bg-zinc-900/60 p-3"><span className="block text-[10px] text-zinc-500">Department</span><span className="mt-1 block text-xs text-zinc-200">{selectedCandidate.profile?.department || 'Not provided'}{selectedCandidate.profile?.graduationYear ? ` · Class of ${selectedCandidate.profile.graduationYear}` : ''}</span></div>
+                </div>
+              </div>
+              <div>
+                <span className="text-[10px] text-zinc-500 font-semibold uppercase">Skills</span>
+                <div className="mt-2 flex flex-wrap gap-1.5">{[...(selectedCandidate.profile?.skills?.technical || []), ...(selectedCandidate.profile?.skills?.soft || [])].map((skill, index) => <span key={`${skill.name || skill}-${index}`} className="rounded-full border border-brand/20 bg-brand/10 px-2 py-1 text-[10px] text-blue-200">{skill.name || skill}</span>)}</div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div><span className="text-[10px] text-zinc-500 font-semibold uppercase">Education</span>{(selectedCandidate.profile?.education || []).length ? <div className="mt-2 space-y-1">{selectedCandidate.profile.education.map(item => <div key={item.id || `${item.degree}-${item.institution}`} className="text-xs text-zinc-300"><strong className="text-white">{item.degree || 'Degree'}</strong><span className="block text-zinc-500">{item.institution || 'Institution not provided'}</span></div>)}</div> : <p className="mt-2 text-xs text-zinc-500">Not provided</p>}</div>
+                <div><span className="text-[10px] text-zinc-500 font-semibold uppercase">Projects</span>{(selectedCandidate.profile?.projects || []).length ? <div className="mt-2 space-y-2">{selectedCandidate.profile.projects.slice(0, 3).map(item => <div key={item.id || item.title} className="text-xs text-zinc-300"><strong className="text-white">{item.title || 'Untitled project'}</strong><span className="block truncate text-zinc-500">{item.description || item.outcome || 'No description'}</span><div className="mt-1.5 flex flex-wrap gap-2">{item.github && <a className="inline-flex items-center gap-1 text-[11px] text-brand hover:text-white" href={externalUrl(item.github)} target="_blank" rel="noreferrer"><ExternalLink className="h-3 w-3" /> GitHub</a>}{item.demo && <a className="inline-flex items-center gap-1 text-[11px] text-brand hover:text-white" href={externalUrl(item.demo)} target="_blank" rel="noreferrer"><ExternalLink className="h-3 w-3" /> Live demo</a>}</div></div>)}</div> : <p className="mt-2 text-xs text-zinc-500">Not provided</p>}</div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {selectedCandidate.profile?.resume?.dataUrl && <><a className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700 px-3 py-2 text-xs font-semibold text-zinc-200 hover:border-brand hover:text-white" href={selectedCandidate.profile.resume.dataUrl} target="_blank" rel="noreferrer"><FileText className="h-3.5 w-3.5" /> View resume</a><a className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700 px-3 py-2 text-xs font-semibold text-zinc-200 hover:border-brand hover:text-white" href={selectedCandidate.profile.resume.dataUrl} download={selectedCandidate.profile.resume.name || 'resume.pdf'}><FileText className="h-3.5 w-3.5" /> Download resume</a></>}
+                {(selectedCandidate.profile?.certifications || []).filter(item => item.certificatePdf?.dataUrl).map(item => <span key={item.id || item.title} className="inline-flex flex-wrap gap-2"><a className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700 px-3 py-2 text-xs font-semibold text-zinc-200 hover:border-brand hover:text-white" href={item.certificatePdf.dataUrl} target="_blank" rel="noreferrer"><FileCheck className="h-3.5 w-3.5" /> View {item.title || 'certificate'}</a><a className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700 px-3 py-2 text-xs font-semibold text-zinc-200 hover:border-brand hover:text-white" href={item.certificatePdf.dataUrl} download={item.certificatePdf.name || `${item.title || 'certificate'}.pdf`}><FileCheck className="h-3.5 w-3.5" /> Download</a></span>)}
+                {!selectedCandidate.profile?.resume?.dataUrl && !(selectedCandidate.profile?.certifications || []).some(item => item.certificatePdf?.dataUrl) && <span className="text-xs text-zinc-500">No uploaded documents available.</span>}
+              </div>
             </div>
 
             {/* Action buttons */}

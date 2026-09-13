@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { studentService } from '../../services/studentService';
 import { useToast } from '../../context/ToastContext';
 import { DashboardLayout } from '../../layouts/DashboardLayout';
@@ -7,396 +7,192 @@ import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Input } from '../../components/ui/Input';
 import { Avatar } from '../../components/ui/Avatar';
-import { 
-  User, Award, Plus, Upload, CheckCircle2, 
-  MapPin, GraduationCap, Github, Globe, FileText, Eye, Pencil, X
-} from 'lucide-react';
+import { Award, BookOpen, BriefcaseBusiness, Check, CheckCircle2, Download, Edit3, FileText, Github, GraduationCap, Globe, Languages, Plus, Save, Sparkles, Target, Trash2, Upload, UserRound, X } from 'lucide-react';
 
-const getExternalUrl = (value) => {
-  if (!value) return null;
-  return /^https?:\/\//i.test(value) ? value : `https://${value}`;
+const TABS = [
+  ['profile', 'Profile', UserRound], ['skills', 'Skills', Sparkles], ['projects', 'Projects', BriefcaseBusiness],
+  ['education', 'Education', GraduationCap], ['certifications', 'Certifications', Award], ['resume', 'Resume', FileText],
+  ['assessments', 'Assessments', BookOpen], ['career', 'Career', Target],
+];
+const emptyProject = { title: '', description: '', technologies: '', role: '', outcome: '', github: '', demo: '' };
+const emptyCertification = { title: '', issuer: '', issueDate: '', credentialId: '', credentialUrl: '', certificatePdf: null };
+const emptyEducation = { degree: '', institution: '', specialization: '', startYear: '', endYear: '', performance: '' };
+const listValue = value => Array.isArray(value) ? value : [];
+const externalUrl = value => value && (/^https?:\/\//i.test(value) ? value : `https://${value}`);
+const skillLevel = skill => Math.max(0, Math.min(100, Number(skill?.current ?? skill?.proficiency ?? 0)));
+const skillName = skill => typeof skill === 'string' ? skill : skill?.name || '';
+
+const getMetrics = profile => {
+  const technical = listValue(profile?.skills?.technical);
+  const soft = listValue(profile?.skills?.soft);
+  const projects = listValue(profile?.projects);
+  const certifications = listValue(profile?.certifications);
+  const education = listValue(profile?.education);
+  const languages = listValue(profile?.languages);
+  const assessment = Number(profile?.careerPath?.readiness || 0);
+  const checks = [Boolean(profile?.name), Boolean(profile?.email), Boolean(profile?.college), Boolean(profile?.department), Boolean(profile?.gpa), Boolean(profile?.graduationYear), technical.length > 0, soft.length > 0, projects.length > 0, education.length > 0, certifications.length > 0, Boolean(profile?.resume?.dataUrl), Boolean(profile?.careerPath?.role), languages.length > 0, assessment > 0];
+  const completion = Math.round(checks.filter(Boolean).length / checks.length * 100);
+  const scores = [technical.length ? technical.reduce((sum, item) => sum + skillLevel(item), 0) / technical.length : 0, projects.length ? Math.min(100, projects.length * 25) : 0, certifications.length ? Math.min(100, certifications.length * 35) : 0, education.length ? 100 : 0, assessment, completion];
+  return { completion, score: Math.round(scores.reduce((sum, value) => sum + value, 0) / scores.length), technical, soft, projects, certifications, education, languages, assessment };
+};
+
+const ScoreRing = ({ value, label }) => <div className="relative h-28 w-28 shrink-0 rounded-full" style={{ background: `conic-gradient(#3b82f6 ${value}%, #27272a ${value}% 100%)` }}><div className="absolute inset-2 flex flex-col items-center justify-center rounded-full bg-[#121214]"><span className="text-2xl font-extrabold text-white">{value}</span><span className="text-[9px] uppercase tracking-wider text-zinc-500">{label}</span></div></div>;
+const ProgressBar = ({ value, color = 'bg-brand' }) => <div className="h-2 overflow-hidden rounded-full bg-zinc-800"><div className={`h-full rounded-full ${color}`} style={{ width: `${Math.max(0, Math.min(100, value))}%` }} /></div>;
+const ProfileValue = ({ label, value }) => <div className="rounded-xl border border-zinc-800/80 bg-gradient-to-br from-zinc-900/80 to-zinc-900/30 p-3 transition-colors hover:border-brand/30"><span className="block text-[10px] font-semibold uppercase tracking-wide text-zinc-500">{label}</span><span className="mt-1 block break-words text-sm text-zinc-200">{value || 'Not added yet'}</span></div>;
+const ProfileOverview = ({ profile, metrics }) => {
+  const technical = metrics.technical.map(skillName).filter(Boolean);
+  const soft = metrics.soft.map(skillName).filter(Boolean);
+  const education = metrics.education;
+  const projects = metrics.projects;
+  const certifications = metrics.certifications;
+  const languages = metrics.languages;
+  return <div className="space-y-6">
+    <Card className="relative overflow-hidden space-y-5 border-zinc-800/80 bg-gradient-to-br from-brand/10 via-[#121214] to-[#121214]">
+      <div className="absolute -right-12 -top-16 h-36 w-36 rounded-full bg-brand/10 blur-3xl" />
+      <div className="relative"><div className="flex items-center gap-2"><UserRound className="h-4 w-4 text-brand" /><h2 className="text-lg font-bold text-white">Profile details</h2></div><p className="mt-1 text-xs text-zinc-500">A complete snapshot of the information employers can see.</p></div>
+      <div className="grid gap-3 sm:grid-cols-2"><ProfileValue label="Full name" value={profile.name} /><ProfileValue label="Email" value={profile.email} /><ProfileValue label="College / institution" value={profile.college} /><ProfileValue label="Degree / department" value={profile.department} /><ProfileValue label="Academic performance" value={profile.gpa} /><ProfileValue label="Graduation year" value={profile.graduationYear} /></div>
+    </Card>
+    <div className="grid gap-6 lg:grid-cols-2">
+      <Card className="space-y-4 border-zinc-800/80 bg-gradient-to-br from-emerald-500/10 via-[#121214] to-[#121214]"><div className="flex items-center gap-2"><Target className="h-4 w-4 text-accent-green" /><div><h2 className="text-sm font-bold uppercase tracking-wider text-zinc-300">Career focus</h2><p className="mt-1 text-xs text-zinc-500">Target role and current readiness.</p></div></div><div className="grid gap-3 sm:grid-cols-2"><ProfileValue label="Target role" value={profile.careerPath?.role} /><ProfileValue label="Career readiness" value={`${metrics.assessment}%`} /></div></Card>
+      <Card className="space-y-4 border-zinc-800/80 bg-gradient-to-br from-violet-500/10 via-[#121214] to-[#121214]"><div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-violet-300" /><div><h2 className="text-sm font-bold uppercase tracking-wider text-zinc-300">Skills</h2><p className="mt-1 text-xs text-zinc-500">Technical and professional strengths.</p></div></div><ProfileValue label="Technical skills" value={technical.join(', ')} /><ProfileValue label="Soft skills" value={soft.join(', ')} /></Card>
+    </div>
+    <div className="grid gap-6 lg:grid-cols-2">
+      <Card className="space-y-4 border-zinc-800/80"><div className="flex items-center justify-between"><div className="flex items-center gap-2"><GraduationCap className="h-4 w-4 text-amber-300" /><h2 className="text-sm font-bold uppercase tracking-wider text-zinc-300">Education</h2></div><Badge>{education.length}</Badge></div>{education.length ? education.map(item => <div key={item.id || `${item.institution}-${item.degree}`} className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-3"><p className="font-semibold text-white">{item.degree || 'Degree not specified'}</p><p className="mt-1 text-xs text-zinc-400">{item.institution || 'Institution not specified'}{item.specialization ? ` · ${item.specialization}` : ''}</p><p className="mt-1 text-[11px] text-zinc-500">{item.startYear || '?'} - {item.endYear || 'Present'}{item.performance ? ` · ${item.performance}` : ''}</p></div>) : <p className="text-sm text-zinc-500">No education added yet.</p>}</Card>
+      <Card className="space-y-4 border-zinc-800/80"><div className="flex items-center justify-between"><div className="flex items-center gap-2"><BriefcaseBusiness className="h-4 w-4 text-sky-300" /><h2 className="text-sm font-bold uppercase tracking-wider text-zinc-300">Projects</h2></div><Badge>{projects.length}</Badge></div>{projects.length ? projects.slice(0, 3).map(item => <div key={item.id || item.title} className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-3"><p className="font-semibold text-white">{item.title || 'Untitled project'}</p><p className="mt-1 text-xs text-zinc-400">{item.description || item.outcome || 'No description added.'}</p>{item.technologies?.length ? <p className="mt-2 text-[11px] text-brand">{item.technologies.join(', ')}</p> : null}<div className="mt-2 flex flex-wrap gap-3">{item.github && <a className="inline-flex items-center gap-1 text-[11px] text-brand hover:text-white" href={externalUrl(item.github)} target="_blank" rel="noreferrer"><Github className="h-3 w-3" /> GitHub</a>}{item.demo && <a className="inline-flex items-center gap-1 text-[11px] text-brand hover:text-white" href={externalUrl(item.demo)} target="_blank" rel="noreferrer"><Globe className="h-3 w-3" /> Live demo</a>}</div></div>) : <p className="text-sm text-zinc-500">No projects added yet.</p>}</Card>
+    </div>
+    <div className="grid gap-6 lg:grid-cols-3">
+      <Card className="space-y-3 border-zinc-800/80"><div className="flex items-center justify-between"><div className="flex items-center gap-2"><Award className="h-4 w-4 text-yellow-300" /><h2 className="text-sm font-bold uppercase tracking-wider text-zinc-300">Certifications</h2></div><Badge>{certifications.length}</Badge></div>{certifications.length ? certifications.map(item => <div key={item.id || `${item.title}-${item.issuer}`}><p className="text-sm font-semibold text-white">{item.title}</p><p className="text-xs text-zinc-500">{item.issuer || 'Issuer not specified'}</p></div>) : <p className="text-sm text-zinc-500">No certifications added yet.</p>}</Card>
+      <Card className="space-y-3 border-zinc-800/80"><div className="flex items-center justify-between"><div className="flex items-center gap-2"><Languages className="h-4 w-4 text-cyan-300" /><h2 className="text-sm font-bold uppercase tracking-wider text-zinc-300">Languages</h2></div><Badge>{languages.length}</Badge></div>{languages.length ? languages.map(item => <div key={item.id || item.name} className="flex justify-between gap-3 text-sm"><span className="text-white">{item.name}</span><span className="text-xs text-zinc-500">{item.proficiency}</span></div>) : <p className="text-sm text-zinc-500">No languages added yet.</p>}</Card>
+      <Card className="space-y-3 border-zinc-800/80"><div className="flex items-center gap-2"><FileText className="h-4 w-4 text-rose-300" /><h2 className="text-sm font-bold uppercase tracking-wider text-zinc-300">Resume</h2></div>{profile.resume?.name ? <><p className="truncate text-sm text-white">{profile.resume.name}</p><p className="text-xs text-accent-green">Uploaded and ready to share</p></> : <p className="text-sm text-zinc-500">No resume uploaded yet.</p>}</Card>
+    </div>
+  </div>;
 };
 
 export const StudentPortfolio = () => {
   const { addToast } = useToast();
   const resumeInputRef = useRef(null);
-
   const [profile, setProfile] = useState(null);
-  const [projects, setProjects] = useState([]);
-  const [certs, setCerts] = useState([]);
-  const [resume, setResume] = useState(null);
+  const [activeTab, setActiveTab] = useState('profile');
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [modal, setModal] = useState(null);
+  const [draft, setDraft] = useState(emptyProject);
+  const [editingId, setEditingId] = useState(null);
+  const [skillDraft, setSkillDraft] = useState({ name: '', current: 60, category: 'Technical' });
+  const [languageDraft, setLanguageDraft] = useState({ name: '', proficiency: 'Advanced' });
+  const metrics = useMemo(() => getMetrics(profile), [profile]);
 
-  // Modal dialog states
-  const [projectModalOpen, setProjectModalOpen] = useState(false);
-  const [newProject, setNewProject] = useState({ title: '', description: '', github: '', demo: '' });
-  const [editingProjectId, setEditingProjectId] = useState(null);
-  const [portfolioPreviewOpen, setPortfolioPreviewOpen] = useState(false);
-  
-  const [certModalOpen, setCertModalOpen] = useState(false);
-  const [newCert, setNewCert] = useState({ title: '', issuer: '', date: '' });
-
-  const fetchData = async () => {
-    try {
-      const data = await studentService.getProfile();
-      setProfile(data);
-      setProjects(data.projects);
-      setCerts(data.certifications);
-      if (data.resume?.dataUrl) {
-        setResume({ name: data.resume.name, url: data.resume.dataUrl });
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+  const loadProfile = async () => {
+    setError('');
+    try { setProfile(await studentService.getProfile()); } catch (err) { setError(err.message || 'Unable to load your profile.'); } finally { setLoading(false); }
   };
+  useEffect(() => { loadProfile(); }, []);
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const openNewProjectModal = () => {
-    setEditingProjectId(null);
-    setNewProject({ title: '', description: '', github: '', demo: '' });
-    setProjectModalOpen(true);
+  const persist = async (changes, message = 'Profile updated') => {
+    setSaving(true);
+    try { const next = await studentService.updateProfile(changes); setProfile(next); addToast(message, 'success'); return next; }
+    catch (err) { addToast(err.message || 'Unable to save profile.', 'error'); throw err; }
+    finally { setSaving(false); }
   };
-
-  const openEditProjectModal = (project) => {
-    setEditingProjectId(project.id);
-    setNewProject({
-      title: project.title || '',
-      description: project.description || '',
-      github: project.github || '',
-      demo: project.demo || ''
-    });
-    setProjectModalOpen(true);
+  const openModal = (type, item = null) => {
+    setEditingId(item?.id || null);
+    setDraft(type === 'project' ? { ...emptyProject, ...(item || {}), technologies: Array.isArray(item?.technologies) ? item.technologies.join(', ') : (item?.technologies || '') } : type === 'certification' ? { ...emptyCertification, ...(item || {}) } : { ...emptyEducation, ...(item || {}) });
+    setModal(type);
   };
-
-  const handleProjectSubmit = async (e) => {
-    e.preventDefault();
-    if (!newProject.title || !newProject.description) {
-      addToast('Please fill out all required fields', 'error');
-      return;
-    }
-
-    const project = {
-      id: editingProjectId || `proj-${Math.random().toString(36).substr(2, 9)}`,
-      ...newProject,
-      status: editingProjectId
-        ? projects.find((item) => item.id === editingProjectId)?.status || 'Completed'
-        : 'Completed'
-    };
-
-    try {
-      if (editingProjectId) {
-        const updatedProjects = projects.map((item) => item.id === editingProjectId ? project : item);
-        await studentService.updateProfile({ projects: updatedProjects });
-        setProjects(updatedProjects);
-        addToast('Project updated successfully!', 'success');
-      } else {
-        const savedProject = await studentService.addProject(project);
-        setProjects(prev => [...prev, savedProject]);
-        addToast('Project added to portfolio!', 'success');
-      }
-      setProjectModalOpen(false);
-      setEditingProjectId(null);
-      setNewProject({ title: '', description: '', github: '', demo: '' });
-    } catch (err) {
-      console.error(err);
-      addToast('Unable to save project. Please try again.', 'error');
-    }
+  const saveCollectionItem = async (event, collection, message) => {
+    event.preventDefault();
+    const item = { ...draft, id: editingId || `${collection.slice(0, -1)}-${Date.now()}` };
+    if (collection === 'projects') item.technologies = String(item.technologies || '').split(',').map(value => value.trim()).filter(Boolean);
+    const values = listValue(profile[collection]);
+    await persist({ [collection]: editingId ? values.map(value => value.id === editingId ? item : value) : [...values, item] }, message);
+    setModal(null);
   };
-
-  const handleAddCert = (e) => {
-    e.preventDefault();
-    if (!newCert.title || !newCert.issuer) {
-      addToast('Please fill out all required fields', 'error');
-      return;
-    }
-
-    const created = {
-      id: `cert-${Math.random().toString(36).substr(2, 9)}`,
-      ...newCert,
-      verified: true
-    };
-
-    setCerts(prev => [...prev, created]);
-    setCertModalOpen(false);
-    setNewCert({ title: '', issuer: '', date: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) });
-    addToast('Certification added and verified!', 'success');
+  const deleteProject = async id => persist({ projects: metrics.projects.filter(project => project.id !== id) }, 'Project removed');
+  const addSkill = async () => {
+    const name = skillDraft.name.trim();
+    if (!name) return;
+    if (metrics.technical.some(skill => skillName(skill).toLowerCase() === name.toLowerCase())) return addToast('That skill is already in your profile.', 'info');
+    await persist({ skills: { ...(profile.skills || {}), technical: [...metrics.technical, { name, current: Number(skillDraft.current), target: 90, required: 75, category: skillDraft.category || 'Technical' }] } }, 'Skill added');
+    setSkillDraft({ name: '', current: 60, category: 'Technical' });
   };
-
-  const handleResumeUpload = () => {
-    resumeInputRef.current?.click();
+  const addLanguage = async () => {
+    if (!languageDraft.name.trim()) return;
+    await persist({ languages: [...metrics.languages, { id: `language-${Date.now()}`, ...languageDraft, name: languageDraft.name.trim() }] }, 'Language added');
+    setLanguageDraft({ name: '', proficiency: 'Advanced' });
   };
-
-  const handleResumeFileChange = async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-
+  const handleResume = async event => {
+    const file = event.target.files?.[0]; event.target.value = '';
     if (!file) return;
-
-    const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-    if (!allowedTypes.includes(file.type)) {
-      addToast('Please select a PDF or Word document.', 'error');
+    if (file.size > 5 * 1024 * 1024 || !['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(file.type)) return addToast('Upload a PDF or Word document under 5 MB.', 'error');
+    try { const resume = await studentService.saveResume(file); setProfile(previous => ({ ...previous, resume })); addToast('Resume uploaded successfully.', 'success'); } catch (err) { addToast(err.message || 'Unable to upload resume.', 'error'); }
+  };
+  const setField = (key, value) => setProfile(previous => ({ ...previous, [key]: value }));
+  const saveProfile = () => persist({ name: profile.name, college: profile.college, department: profile.department, gpa: profile.gpa, graduationYear: profile.graduationYear }, 'Profile details saved');
+  const handleCertificatePdf = event => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (file.type !== 'application/pdf' || file.size > 5 * 1024 * 1024) {
+      addToast('Upload a PDF certificate under 5 MB.', 'error');
       return;
     }
-
-    try {
-      const savedResume = await studentService.saveResume(file);
-      setResume({ name: savedResume.name, url: savedResume.dataUrl });
-      addToast(`Resume uploaded: ${file.name}`, 'success');
-    } catch (err) {
-      console.error(err);
-      addToast('Unable to save resume. Please try again.', 'error');
-    }
+    const reader = new FileReader();
+    reader.onload = () => setDraft(previous => ({
+      ...previous,
+      certificatePdf: { name: file.name, type: file.type, dataUrl: reader.result },
+    }));
+    reader.onerror = () => addToast('Unable to read certificate PDF.', 'error');
+    reader.readAsDataURL(file);
   };
 
-  if (loading) {
-    return (
-      <DashboardLayout>
-        <div className="h-64 bg-zinc-900 border border-zinc-800 rounded-2xl flex items-center justify-center animate-pulse" />
-      </DashboardLayout>
-    );
-  }
+  if (loading) return <DashboardLayout><div className="space-y-6 animate-pulse"><div className="h-40 rounded-2xl bg-zinc-900" /><div className="h-96 rounded-2xl bg-zinc-900" /></div></DashboardLayout>;
+  if (error || !profile) return <DashboardLayout><Card className="mx-auto max-w-xl space-y-4 text-center"><h2 className="text-lg font-bold text-white">Your profile is unavailable</h2><p className="text-sm text-zinc-400">{error || 'No profile data was returned.'}</p><Button onClick={loadProfile}>Try again</Button></Card></DashboardLayout>;
+  const missing = ['education', 'projects', 'certifications', 'resume', 'languages', 'careerPath.role'].filter(key => key === 'careerPath.role' ? !profile.careerPath?.role : !profile[key]?.length && !profile[key]?.dataUrl);
 
-  return (
-    <DashboardLayout>
-      <div className="space-y-8">
-        {/* Header Profile Summary */}
-        <div className="bg-[#121214] border border-zinc-800 rounded-2xl p-6 relative overflow-hidden flex flex-col md:flex-row gap-6 items-center">
-          <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-brand/5 rounded-full blur-2xl pointer-events-none" />
-          
-          <Avatar name={profile.name} sizeClass="w-24 h-24 text-2xl rounded-2xl" />
-
-          <div className="flex-grow text-center md:text-left space-y-2">
-            <div className="flex flex-col md:flex-row md:items-center gap-2 justify-center md:justify-start">
-              <h2 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">{profile.name}</h2>
-              <Badge variant="brand" className="w-fit mx-auto md:mx-0">Verified Student</Badge>
-            </div>
-            <p className="text-xs sm:text-sm text-zinc-400 font-normal leading-relaxed">
-              Enrolled in {profile.department} &bull; {profile.college}
-            </p>
-            <div className="flex flex-wrap justify-center md:justify-start gap-4 text-xs text-zinc-500">
-              <span className="flex items-center gap-1"><GraduationCap className="w-4 h-4" /> GPA: {profile.gpa}</span>
-              <span className="flex items-center gap-1"><MapPin className="w-4 h-4" /> Graduating {profile.graduationYear}</span>
+  return <DashboardLayout><div className="space-y-6">
+    <section className="overflow-hidden rounded-2xl border border-zinc-800 bg-[#121214] shadow-xl shadow-black/20">
+      <div className="relative h-32 overflow-hidden bg-gradient-to-r from-blue-950 via-brand/70 to-cyan-900 sm:h-40">
+        <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(circle at 20% 20%, white 1px, transparent 1px), radial-gradient(circle at 80% 70%, white 1px, transparent 1px)', backgroundSize: '34px 34px' }} />
+        <div className="absolute -right-12 -top-20 h-64 w-64 rounded-full border-[28px] border-white/10" />
+        <div className="absolute -bottom-28 left-1/3 h-64 w-64 rounded-full border-[20px] border-cyan-300/10" />
+      </div>
+      <div className="relative px-5 pb-5 sm:px-7 sm:pb-6">
+        <div className="-mt-14 flex flex-col gap-4 sm:-mt-16 sm:flex-row sm:items-end sm:justify-between">
+          <div className="flex min-w-0 items-start gap-4">
+            <div className="rounded-full border-4 border-[#121214] bg-[#121214] shadow-lg"><Avatar name={profile.name} sizeClass="h-24 w-24 rounded-full text-3xl sm:h-28 sm:w-28" /></div>
+            <div className="min-w-0 pt-16 pb-1 sm:pt-[4.5rem]">
+              <div className="flex flex-wrap items-center gap-2"><h1 className="truncate text-xl font-extrabold text-white sm:text-2xl">{profile.name}</h1><Badge variant="brand">Student</Badge></div>
+              <p className="mt-1 truncate text-sm font-medium text-zinc-300">{profile.careerPath?.role || 'Add your target role'}</p>
+              <p className="mt-1 truncate text-xs text-zinc-500">{profile.department || 'Add your field'} {profile.college ? `· ${profile.college}` : '· Education details needed'}</p>
             </div>
           </div>
-
-          <div className="flex flex-wrap justify-center gap-3">
-            <input
-              ref={resumeInputRef}
-              type="file"
-              accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-              onChange={handleResumeFileChange}
-              className="hidden"
-            />
-            <Button variant="outline" size="sm" onClick={handleResumeUpload} className="gap-1.5 py-2">
-              <Upload className="w-4 h-4" /> {resume ? 'Re-upload Resume' : 'Upload Resume'}
-            </Button>
-            {resume && (
-              <a href={resume.url} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 transition-all duration-200 hover:bg-zinc-800/50 hover:text-white">
-                <Eye className="w-4 h-4" /> View Resume
-              </a>
-            )}
-            <Button variant="outline" size="sm" onClick={() => setPortfolioPreviewOpen(true)} className="py-2">
-              View Portfolio
-            </Button>
-          </div>
+          <Button size="sm" onClick={() => { setActiveTab('profile'); setEditingProfile(true); }} className="w-fit gap-1.5 self-start sm:self-end"><Edit3 className="h-3.5 w-3.5" /> Edit profile</Button>
         </div>
-
-        {/* Portfolio Body Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          
-          {/* Projects and Experience */}
-          <div className="lg:col-span-8 space-y-6">
-            <div className="flex justify-between items-center">
-              <h3 className="text-sm font-bold text-zinc-200 uppercase tracking-wider flex items-center gap-2">
-                <FileText className="w-4.5 h-4.5 text-brand" /> Projects & Research Work
-              </h3>
-              <Button size="sm" onClick={openNewProjectModal} className="gap-1 px-3 py-1">
-                <Plus className="w-4 h-4" /> Add Project
-              </Button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {projects.map((proj) => (
-                <Card key={proj.id} className="space-y-4 p-5 flex flex-col justify-between">
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-start">
-                      <h4 className="text-sm font-bold text-white leading-tight">{proj.title}</h4>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="brand" className="text-[10px]">{proj.status}</Badge>
-                          <button type="button" onClick={() => openEditProjectModal(proj)} className="text-zinc-500 hover:text-white" title="Edit project">
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                    </div>
-                    <p className="text-xs text-zinc-400 leading-relaxed font-normal">{proj.description}</p>
-                  </div>
-                  <div className="flex gap-4 border-t border-zinc-800/60 mt-4 pt-3 text-[10px] text-zinc-500 font-semibold">
-                    {proj.github && (
-                      <a href={getExternalUrl(proj.github)} target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-white cursor-pointer">
-                        <Github className="w-3.5 h-3.5" /> Code
-                      </a>
-                    )}
-                    {proj.demo && (
-                      <a href={getExternalUrl(proj.demo)} target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-white cursor-pointer">
-                        <Globe className="w-3.5 h-3.5" /> Demo
-                      </a>
-                    )}
-                  </div>
-                </Card>
-              ))}
-            </div>
-          </div>
-
-          {/* Certifications and credentials */}
-          <div className="lg:col-span-4 space-y-6">
-            <div className="flex justify-between items-center">
-              <h3 className="text-sm font-bold text-zinc-200 uppercase tracking-wider flex items-center gap-2">
-                <Award className="w-4.5 h-4.5 text-brand" /> Certifications
-              </h3>
-              <button onClick={() => setCertModalOpen(true)} className="text-xs font-semibold text-brand hover:underline">
-                Add Cert
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              {certs.map((cert) => (
-                <Card key={cert.id} className="p-4 flex items-start gap-3 bg-[#121214]/60 border-zinc-800">
-                  <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400">
-                    <Award className="w-4.5 h-4.5" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-xs font-bold text-zinc-200 truncate">{cert.title}</h4>
-                    <p className="text-[10px] text-zinc-500 mt-0.5 truncate">{cert.issuer} &bull; {cert.date}</p>
-                  </div>
-                  {cert.verified && (
-                    <CheckCircle2 className="w-4.5 h-4.5 text-accent-green flex-shrink-0" title="Institution Verified" />
-                  )}
-                </Card>
-              ))}
-            </div>
-          </div>
-
+        <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-zinc-800/80 pt-4 text-xs text-zinc-400">
+          <span>{profile.email || 'Email not added'}</span><span>{profile.graduationYear ? `Graduating ${profile.graduationYear}` : 'Graduation year not set'}</span><span>{metrics.projects.length} project{metrics.projects.length === 1 ? '' : 's'}</span><span>{metrics.technical.length + metrics.soft.length} skill{metrics.technical.length + metrics.soft.length === 1 ? '' : 's'}</span>
+        </div>
+        <div className="mt-5 grid gap-3 border-t border-zinc-800/80 pt-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/50 p-3"><p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Education</p><p className="mt-1 truncate text-sm font-semibold text-white">{profile.department || 'Department not added'}</p><p className="mt-1 truncate text-[11px] text-zinc-500">{profile.college || 'College not added'}</p></div>
+          <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/50 p-3"><p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Academic performance</p><p className="mt-1 text-sm font-semibold text-white">{profile.gpa || 'Not added yet'}</p><p className="mt-1 text-[11px] text-zinc-500">{profile.graduationYear ? `Class of ${profile.graduationYear}` : 'Graduation year not set'}</p></div>
+          <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/50 p-3"><p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Career focus</p><p className="mt-1 truncate text-sm font-semibold text-white">{profile.careerPath?.role || 'Role not selected'}</p><p className="mt-1 text-[11px] text-zinc-500">{metrics.assessment}% readiness</p></div>
+          <div className="flex items-center justify-between rounded-xl border border-zinc-800/80 bg-zinc-900/50 p-3"><div><p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Profile score</p><p className="mt-1 text-xl font-extrabold text-white">{metrics.score}/100</p></div><ScoreRing value={metrics.score} label="score" /></div>
         </div>
       </div>
-
-      {portfolioPreviewOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-sm p-4 sm:p-8">
-          <div className="mx-auto max-w-4xl rounded-2xl border border-zinc-800 bg-[#121214] p-6 shadow-2xl sm:p-8">
-            <div className="mb-6 flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-brand">Student Portfolio</p>
-                <h3 className="mt-1 text-xl font-bold text-white">{profile.name}</h3>
-              </div>
-              <button type="button" onClick={() => setPortfolioPreviewOpen(false)} className="text-zinc-500 hover:text-white" title="Close portfolio preview">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {projects.map((proj) => (
-                <Card key={proj.id} className="space-y-3 p-5">
-                  <div className="flex items-start justify-between gap-3">
-                    <h4 className="text-sm font-bold text-white">{proj.title}</h4>
-                    <Badge variant="brand" className="text-[10px]">{proj.status}</Badge>
-                  </div>
-                  <p className="text-xs leading-relaxed text-zinc-400">{proj.description}</p>
-                  <div className="flex gap-4 border-t border-zinc-800/60 pt-3 text-[10px] font-semibold text-zinc-500">
-                    {proj.github && <a href={getExternalUrl(proj.github)} target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-white"><Github className="w-3.5 h-3.5" /> Code</a>}
-                    {proj.demo && <a href={getExternalUrl(proj.demo)} target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-white"><Globe className="w-3.5 h-3.5" /> Demo</a>}
-                  </div>
-                </Card>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add Project Modal */}
-      {projectModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-[#121214] border border-zinc-800 rounded-2xl shadow-2xl p-6 sm:p-8 space-y-6 animate-[slideIn_0.2s_ease-out_forwards]">
-            <div className="flex justify-between items-center">
-              <h3 className="text-base font-bold text-white">{editingProjectId ? 'Edit Project' : 'Add New Project'}</h3>
-              <button onClick={() => setProjectModalOpen(false)} className="text-zinc-500 hover:text-white transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <form onSubmit={handleProjectSubmit} className="space-y-4">
-              <Input 
-                label="Project Title" 
-                value={newProject.title} 
-                onChange={(e) => setNewProject({...newProject, title: e.target.value})} 
-                placeholder="e.g. Algovis" 
-                required 
-              />
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-zinc-400 tracking-wide uppercase">Description</label>
-                <textarea 
-                  value={newProject.description} 
-                  onChange={(e) => setNewProject({...newProject, description: e.target.value})} 
-                  placeholder="Overview of scope and tech stack..." 
-                  className="w-full px-3.5 py-2.5 bg-background border border-zinc-800 rounded-lg text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-brand/40 min-h-[80px]"
-                  required
-                />
-              </div>
-              <Input 
-                label="Github Repository" 
-                value={newProject.github} 
-                onChange={(e) => setNewProject({...newProject, github: e.target.value})} 
-                placeholder="github.com/username/project" 
-              />
-              <Input 
-                label="Live Demo Link" 
-                value={newProject.demo} 
-                onChange={(e) => setNewProject({...newProject, demo: e.target.value})} 
-                placeholder="project.vercel.app" 
-              />
-              <div className="flex gap-4 pt-2">
-                <Button variant="secondary" className="w-full" onClick={() => setProjectModalOpen(false)}>Cancel</Button>
-                <Button type="submit" className="w-full justify-center">{editingProjectId ? 'Save Changes' : 'Save Project'}</Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Add Certification Modal */}
-      {certModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-[#121214] border border-zinc-800 rounded-2xl shadow-2xl p-6 sm:p-8 space-y-6 animate-[slideIn_0.2s_ease-out_forwards]">
-            <div className="flex justify-between items-center">
-              <h3 className="text-base font-bold text-white">Add Certification</h3>
-              <button onClick={() => setCertModalOpen(false)} className="text-zinc-500 hover:text-white transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <form onSubmit={handleAddCert} className="space-y-4">
-              <Input 
-                label="Certification Name" 
-                value={newCert.title} 
-                onChange={(e) => setNewCert({...newCert, title: e.target.value})} 
-                placeholder="e.g. AWS SysOps" 
-                required 
-              />
-              <Input 
-                label="Issuer Organization" 
-                value={newCert.issuer} 
-                onChange={(e) => setNewCert({...newCert, issuer: e.target.value})} 
-                placeholder="Meta, Google, etc." 
-                required 
-              />
-              <div className="flex gap-4 pt-2">
-                <Button variant="secondary" className="w-full" onClick={() => setCertModalOpen(false)}>Cancel</Button>
-                <Button type="submit" className="w-full justify-center">Add Certification</Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </DashboardLayout>
-  );
+    </section>
+    <nav className="flex gap-2 overflow-x-auto border-b border-zinc-800 pb-1" aria-label="Profile sections">{TABS.map(([id, label, Icon]) => <button key={id} type="button" onClick={() => { setActiveTab(id); if (id === 'profile') setEditingProfile(false); }} className={`flex shrink-0 items-center gap-2 rounded-t-lg border-b-2 px-3 py-3 text-xs font-semibold transition-colors ${activeTab === id ? 'border-brand text-white' : 'border-transparent text-zinc-500 hover:text-zinc-200'}`}><Icon className="h-4 w-4" />{label}</button>)}</nav>
+    {activeTab === 'profile' && (editingProfile ? <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]"><Card className="space-y-5"><div className="flex items-center justify-between"><div><h2 className="text-lg font-bold text-white">Edit profile</h2><p className="mt-1 text-xs text-zinc-500">Keep the basics current so employers can understand your context.</p></div><div className="flex gap-2"><Button size="sm" variant="ghost" onClick={() => setEditingProfile(false)}>Cancel</Button><Button size="sm" onClick={async () => { await saveProfile(); setEditingProfile(false); }} disabled={saving} className="gap-1.5"><Save className="h-3.5 w-3.5" /> Save</Button></div></div><div className="grid gap-4 sm:grid-cols-2"><Input label="Full name" value={profile.name || ''} onChange={event => setField('name', event.target.value)} /><Input label="Email" value={profile.email || ''} disabled /><Input label="College / institution" value={profile.college || ''} onChange={event => setField('college', event.target.value)} /><Input label="Degree / department" value={profile.department || ''} onChange={event => setField('department', event.target.value)} /><Input label="Academic performance" value={profile.gpa || ''} onChange={event => setField('gpa', event.target.value)} /><Input label="Graduation year" type="number" value={profile.graduationYear || ''} onChange={event => setField('graduationYear', event.target.value)} /></div></Card><Card className="space-y-4"><h2 className="text-sm font-bold uppercase tracking-wider text-zinc-300">Complete your profile</h2>{missing.length ? <div className="space-y-3">{missing.map(key => <button key={key} type="button" onClick={() => setActiveTab(key === 'careerPath.role' ? 'career' : key)} className="flex w-full items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 text-left text-xs text-zinc-300 hover:border-brand/50"><span className="capitalize">Add {key.replace('careerPath.', '').replace(/([A-Z])/g, ' $1')}</span><Plus className="h-4 w-4 text-brand" /></button>)}</div> : <p className="text-sm text-accent-green">You have completed every core profile section.</p>}<div className="border-t border-zinc-800 pt-4"><p className="mb-2 text-xs text-zinc-500">Score factors</p><div className="grid grid-cols-2 gap-2 text-xs text-zinc-300">{[['Skills', metrics.technical.length], ['Projects', metrics.projects.length], ['Certifications', metrics.certifications.length], ['Assessment', `${metrics.assessment}%`]].map(([label, value]) => <div key={label} className="rounded-lg bg-zinc-900/60 p-3"><span className="block text-[10px] uppercase text-zinc-500">{label}</span><strong className="mt-1 block text-white">{value}</strong></div>)}</div></div></Card></div> : <ProfileOverview profile={profile} metrics={metrics} />)}
+    {activeTab === 'skills' && <div className="space-y-6"><Card className="space-y-4"><div><h2 className="text-lg font-bold text-white">Skills and proficiency</h2><p className="mt-1 text-xs text-zinc-500">Skills are normalized by name for consistent opportunity matching.</p></div><div className="grid gap-3 sm:grid-cols-[1fr_160px_140px_auto]"><Input label="Skill name" value={skillDraft.name} onChange={event => setSkillDraft({ ...skillDraft, name: event.target.value })} placeholder="e.g. React" /><div className="space-y-1.5"><label className="text-xs font-semibold text-zinc-400">Proficiency</label><input className="mt-2 w-full accent-brand" type="range" min="0" max="100" value={skillDraft.current} onChange={event => setSkillDraft({ ...skillDraft, current: event.target.value })} /><span className="text-xs text-brand">{skillDraft.current}%</span></div><Input label="Category" value={skillDraft.category} onChange={event => setSkillDraft({ ...skillDraft, category: event.target.value })} /><Button onClick={addSkill} className="self-end gap-1.5"><Plus className="h-4 w-4" /> Add</Button></div></Card><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{[...metrics.technical, ...metrics.soft].map((skill, index) => <Card key={`${skillName(skill)}-${index}`} className="space-y-3"><div className="flex items-start justify-between gap-3"><div><h3 className="font-bold text-white">{skillName(skill)}</h3><p className="text-[11px] text-zinc-500">{skill.category || 'Professional skill'}</p></div><Badge variant={skillLevel(skill) >= 75 ? 'success' : 'warning'}>{skillLevel(skill)}%</Badge></div><ProgressBar value={skillLevel(skill)} color={skillLevel(skill) >= 75 ? 'bg-accent-green' : 'bg-brand'} /><p className="text-[11px] text-zinc-500">{skillLevel(skill) >= 80 ? 'Strong signal for matching' : 'Build evidence through projects or assessments'}</p></Card>)}</div></div>}
+    {activeTab === 'projects' && <CollectionSection title="Projects and outcomes" description="Show employers what you built, your role, and the evidence behind it." action="Add project" onAdd={() => openModal('project')} empty="Add your first project to make your profile more concrete." items={metrics.projects} renderItem={project => <Card key={project.id} className="flex h-full flex-col gap-4"><div className="flex items-start justify-between gap-3"><div><h3 className="font-bold text-white">{project.title}</h3><p className="mt-1 text-xs text-zinc-500">{project.role || 'Contributor'} {project.outcome ? `· ${project.outcome}` : ''}</p></div><div className="flex gap-2"><button type="button" title="Edit project" onClick={() => openModal('project', project)} className="text-zinc-500 hover:text-white"><Edit3 className="h-4 w-4" /></button><button type="button" title="Delete project" onClick={() => deleteProject(project.id)} className="text-zinc-500 hover:text-red-400"><Trash2 className="h-4 w-4" /></button></div></div><p className="flex-1 text-sm leading-relaxed text-zinc-400">{project.description}</p><div className="flex flex-wrap gap-1.5">{listValue(project.technologies).map(technology => <Badge key={technology}>{technology}</Badge>)}</div><div className="flex gap-4 border-t border-zinc-800 pt-3 text-xs text-zinc-500">{project.github && <a className="flex items-center gap-1 hover:text-white" href={externalUrl(project.github)} target="_blank" rel="noreferrer"><Github className="h-3.5 w-3.5" /> Code</a>}{project.demo && <a className="flex items-center gap-1 hover:text-white" href={externalUrl(project.demo)} target="_blank" rel="noreferrer"><Globe className="h-3.5 w-3.5" /> Live demo</a>}</div></Card>} />}
+    {activeTab === 'education' && <CollectionSection title="Education" description="Add academic context and performance details." action="Add education" onAdd={() => openModal('education')} empty="Add a degree or academic program." items={metrics.education} renderItem={item => <Card key={item.id} className="relative border-l-2 border-brand"><span className="text-xs font-semibold text-brand">{item.startYear || 'Start'} – {item.endYear || 'Present'}</span><h3 className="mt-2 font-bold text-white">{item.degree}</h3><p className="text-sm text-zinc-400">{item.institution}</p><p className="mt-1 text-xs text-zinc-500">{item.specialization} {item.performance && `· ${item.performance}`}</p><button type="button" className="absolute right-4 top-4 text-zinc-500 hover:text-white" onClick={() => openModal('education', item)}><Edit3 className="h-4 w-4" /></button></Card>} />}
+    {activeTab === 'certifications' && <CollectionSection title="Certifications" description="Credentials help validate your skill signals." action="Add certification" onAdd={() => openModal('certification')} empty="Add certifications, credentials, or verified learning." items={metrics.certifications} renderItem={item => <Card key={item.id} className="flex items-start gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand"><Award className="h-5 w-5" /></div><div className="min-w-0 flex-1"><h3 className="font-bold text-white">{item.title}</h3><p className="text-sm text-zinc-400">{item.issuer}</p><p className="mt-1 text-xs text-zinc-500">{item.issueDate || item.date || 'Date not set'} {item.credentialId && `· ${item.credentialId}`}</p>{item.certificatePdf?.dataUrl && <div className="mt-2 flex flex-wrap items-center gap-3"><a className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand hover:text-white" href={item.certificatePdf.dataUrl} target="_blank" rel="noreferrer"><FileText className="h-3.5 w-3.5" /> View PDF</a><a className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-400 hover:text-white" href={item.certificatePdf.dataUrl} download={item.certificatePdf.name || `${item.title || 'certificate'}.pdf`}><Download className="h-3.5 w-3.5" /> Download</a></div>}</div><button type="button" title="Edit certification" onClick={() => openModal('certification', item)} className="text-zinc-500 hover:text-white"><Edit3 className="h-4 w-4" /></button></Card>} />}
+    {activeTab === 'resume' && <Card className="mx-auto max-w-2xl space-y-6"><div><h2 className="text-lg font-bold text-white">Resume / CV</h2><p className="mt-1 text-xs text-zinc-500">Keep one current, accessible version ready for applications.</p></div><input ref={resumeInputRef} type="file" accept=".pdf,.doc,.docx" onChange={handleResume} className="hidden" />{profile.resume?.dataUrl ? <div className="flex flex-col gap-4 rounded-xl border border-accent-green/30 bg-accent-green/5 p-5 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><CheckCircle2 className="h-6 w-6 text-accent-green" /><div><p className="font-semibold text-white">{profile.resume.name}</p><p className="text-xs text-accent-green">Uploaded and ready to share</p></div></div><div className="flex flex-wrap gap-2"><a className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700 px-3 py-2 text-xs font-semibold text-zinc-200 hover:bg-zinc-800" href={profile.resume.dataUrl} target="_blank" rel="noreferrer"><Globe className="h-4 w-4" /> View</a><a className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700 px-3 py-2 text-xs font-semibold text-zinc-200 hover:bg-zinc-800" href={profile.resume.dataUrl} download={profile.resume.name}><Download className="h-4 w-4" /> Download</a><Button size="sm" onClick={() => resumeInputRef.current?.click()} className="gap-1.5"><Upload className="h-4 w-4" /> Re-upload</Button></div></div> : <button type="button" onClick={() => resumeInputRef.current?.click()} className="flex min-h-44 w-full flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-zinc-700 bg-zinc-900/40 text-zinc-400 hover:border-brand hover:text-white"><Upload className="h-8 w-8 text-brand" /><span className="text-sm font-semibold">Upload your resume</span><span className="text-xs text-zinc-500">PDF, DOC, or DOCX up to 5 MB</span></button>}</Card>}
+    {activeTab === 'assessments' && <Card className="space-y-6"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-lg font-bold text-white">Assessment performance</h2><p className="mt-1 text-xs text-zinc-500">Use results to focus your next learning step.</p></div><Button onClick={() => window.location.assign('/student/assessment')} className="gap-1.5"><BookOpen className="h-4 w-4" /> Take assessment</Button></div><div className="grid gap-4 sm:grid-cols-3"><div className="rounded-xl bg-zinc-900/70 p-4"><span className="text-xs text-zinc-500">Latest score</span><strong className="mt-1 block text-3xl text-white">{metrics.assessment}%</strong><ProgressBar value={metrics.assessment} /></div><div className="rounded-xl bg-zinc-900/70 p-4 sm:col-span-2"><span className="text-xs text-zinc-500">Career readiness</span><div className="mt-3 flex items-center gap-3"><div className="flex-1"><ProgressBar value={metrics.assessment} /></div><span className="text-sm font-bold text-white">{metrics.assessment}%</span></div><p className="mt-3 text-xs text-zinc-500">Complete an assessment to unlock stronger match explanations.</p></div></div><div className="grid gap-3 sm:grid-cols-2">{listValue(profile.assessmentHistory).map(result => <div key={result.id || result.createdAt} className="rounded-lg border border-zinc-800 p-4"><div className="flex justify-between text-xs"><span className="text-zinc-400">{result.domain || 'Skill assessment'}</span><strong className="text-white">{result.score}%</strong></div><ProgressBar value={result.score} /><p className="mt-2 text-[11px] text-zinc-500">{result.createdAt ? new Date(result.createdAt).toLocaleDateString() : 'Recent result'}</p></div>)}</div></Card>}
+    {activeTab === 'career' && <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]"><Card className="space-y-5"><div><h2 className="text-lg font-bold text-white">Career preferences</h2><p className="mt-1 text-xs text-zinc-500">These signals improve opportunity recommendations.</p></div><div className="grid gap-4 sm:grid-cols-2"><Input label="Preferred job role" value={profile.careerPath?.role || ''} onChange={event => setProfile(previous => ({ ...previous, careerPath: { ...(previous.careerPath || {}), role: event.target.value } }))} /><Input label="Industries" value={profile.careerPath?.industries || ''} onChange={event => setProfile(previous => ({ ...previous, careerPath: { ...(previous.careerPath || {}), industries: event.target.value } }))} /><Input label="Work mode" value={profile.careerPath?.workMode || ''} onChange={event => setProfile(previous => ({ ...previous, careerPath: { ...(previous.careerPath || {}), workMode: event.target.value } }))} placeholder="Remote, hybrid, on-site" /><Input label="Experience" value={profile.careerPath?.experience || ''} onChange={event => setProfile(previous => ({ ...previous, careerPath: { ...(previous.careerPath || {}), experience: event.target.value } }))} placeholder="Projects, internships, years" /></div><Button disabled={saving} onClick={() => persist({ careerPath: profile.careerPath }, 'Career preferences saved')} className="gap-1.5"><Save className="h-4 w-4" /> Save preferences</Button></Card><Card className="space-y-4"><h2 className="text-sm font-bold uppercase tracking-wider text-zinc-300"><Languages className="mr-2 inline h-4 w-4 text-brand" /> Languages</h2><div className="flex gap-2"><Input label="Language" value={languageDraft.name} onChange={event => setLanguageDraft({ ...languageDraft, name: event.target.value })} placeholder="English" /><select aria-label="Language proficiency" value={languageDraft.proficiency} onChange={event => setLanguageDraft({ ...languageDraft, proficiency: event.target.value })} className="mt-6 rounded-lg border border-zinc-800 bg-background px-3 text-xs text-zinc-200"><option>Native</option><option>Advanced</option><option>Intermediate</option><option>Beginner</option></select><Button onClick={addLanguage} className="mt-6 px-3"><Plus className="h-4 w-4" /></Button></div><div className="space-y-2">{metrics.languages.map(language => <div key={language.id || language.name} className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-2 text-sm"><span className="text-zinc-200">{language.name}</span><Badge variant="outline">{language.proficiency}</Badge></div>)}</div></Card></div>}
+  </div>
+  {modal && <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/75 p-4"><div className="w-full max-w-lg rounded-2xl border border-zinc-800 bg-[#121214] p-6 shadow-2xl"><div className="mb-5 flex items-center justify-between"><h2 className="text-lg font-bold capitalize text-white">{editingId ? 'Edit' : 'Add'} {modal}</h2><button type="button" onClick={() => setModal(null)} className="text-zinc-500 hover:text-white"><X className="h-5 w-5" /></button></div><form onSubmit={event => saveCollectionItem(event, modal === 'project' ? 'projects' : modal === 'certification' ? 'certifications' : 'education', `${modal} saved`)} className="space-y-4">{modal === 'project' && <><Input label="Title" required value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })} /><Input label="Your role" value={draft.role} onChange={event => setDraft({ ...draft, role: event.target.value })} /><textarea required aria-label="Project description" value={draft.description} onChange={event => setDraft({ ...draft, description: event.target.value })} placeholder="What did you build?" className="min-h-24 w-full rounded-lg border border-zinc-800 bg-background p-3 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-brand/40" /><Input label="Technologies (comma separated)" value={draft.technologies} onChange={event => setDraft({ ...draft, technologies: event.target.value })} /><Input label="Outcome" value={draft.outcome} onChange={event => setDraft({ ...draft, outcome: event.target.value })} /><div className="grid gap-4 sm:grid-cols-2"><Input label="Code link" value={draft.github} onChange={event => setDraft({ ...draft, github: event.target.value })} /><Input label="Live link" value={draft.demo} onChange={event => setDraft({ ...draft, demo: event.target.value })} /></div></>}{modal === 'certification' && <><Input label="Certification name" required value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })} /><Input label="Issuing organization" required value={draft.issuer} onChange={event => setDraft({ ...draft, issuer: event.target.value })} /><div className="grid gap-4 sm:grid-cols-2"><Input label="Issue date" type="month" value={draft.issueDate} onChange={event => setDraft({ ...draft, issueDate: event.target.value })} /><Input label="Credential ID" value={draft.credentialId} onChange={event => setDraft({ ...draft, credentialId: event.target.value })} /></div><Input label="Credential URL" value={draft.credentialUrl} onChange={event => setDraft({ ...draft, credentialUrl: event.target.value })} /><label className="block text-xs font-semibold text-zinc-400">Certificate PDF<span className="mt-1 block cursor-pointer rounded-lg border border-dashed border-zinc-700 bg-zinc-900/50 p-3 text-xs font-normal text-zinc-400 hover:border-brand hover:text-white"><input type="file" accept=".pdf,application/pdf" onChange={handleCertificatePdf} className="sr-only" />{draft.certificatePdf?.name || 'Choose a PDF certificate (up to 5 MB)'}</span></label></>}{modal === 'education' && <><Input label="Degree" required value={draft.degree} onChange={event => setDraft({ ...draft, degree: event.target.value })} /><Input label="Institution" required value={draft.institution} onChange={event => setDraft({ ...draft, institution: event.target.value })} /><Input label="Specialization" value={draft.specialization} onChange={event => setDraft({ ...draft, specialization: event.target.value })} /><div className="grid gap-4 sm:grid-cols-2"><Input label="Start year" type="number" value={draft.startYear} onChange={event => setDraft({ ...draft, startYear: event.target.value })} /><Input label="End year" type="number" value={draft.endYear} onChange={event => setDraft({ ...draft, endYear: event.target.value })} /></div><Input label="Performance" value={draft.performance} onChange={event => setDraft({ ...draft, performance: event.target.value })} placeholder="8.4 / 10 GPA" /></>}<div className="flex gap-3 pt-2"><Button type="button" variant="secondary" onClick={() => setModal(null)} className="w-full justify-center">Cancel</Button><Button type="submit" disabled={saving} className="w-full justify-center gap-1.5"><Check className="h-4 w-4" /> Save</Button></div></form></div></div>}
+  </DashboardLayout>;
 };
+
+const CollectionSection = ({ title, description, action, onAdd, empty, items, renderItem }) => <section className="space-y-5"><div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><h2 className="text-lg font-bold text-white">{title}</h2><p className="mt-1 text-xs text-zinc-500">{description}</p></div><Button size="sm" onClick={onAdd} className="w-fit gap-1.5"><Plus className="h-4 w-4" /> {action}</Button></div>{items.length ? <div className="grid gap-4 md:grid-cols-2">{items.map(renderItem)}</div> : <Card className="border-dashed py-12 text-center"><p className="text-sm text-zinc-400">{empty}</p><Button size="sm" onClick={onAdd} className="mt-4">{action}</Button></Card>}</section>;

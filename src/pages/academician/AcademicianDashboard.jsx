@@ -5,7 +5,7 @@ import { DashboardLayout } from '../../layouts/DashboardLayout';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
-import { Award, Briefcase, Calendar, Cpu, Layers, HelpCircle } from 'lucide-react';
+import { Award, Briefcase, Cpu, Layers } from 'lucide-react';
 
 export const AcademicianDashboard = () => {
   const { addToast } = useToast();
@@ -14,20 +14,20 @@ export const AcademicianDashboard = () => {
   const [opps, setOpps] = useState([]);
   const [collabs, setCollabs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [appliedIds, setAppliedIds] = useState([]);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const profileData = await academicianService.getProfile();
-        const oppsData = await academicianService.getOpportunities();
-        const collabsData = await academicianService.getCollaborations();
+        const overview = await academicianService.getOverview();
         
-        setProfile(profileData);
-        setOpps(oppsData);
-        setCollabs(collabsData);
+        setProfile(overview.profile);
+        setOpps(Array.isArray(overview.opportunities) ? overview.opportunities : []);
+        setCollabs(Array.isArray(overview.collaborations) ? overview.collaborations : []);
       } catch (err) {
         console.error(err);
+        setError(err.message || 'Unable to load the academician dashboard.');
       } finally {
         setLoading(false);
       }
@@ -36,8 +36,9 @@ export const AcademicianDashboard = () => {
   }, []);
 
   const handleApply = (oppId, title) => {
+    if (appliedIds.includes(oppId)) return;
     setAppliedIds(prev => [...prev, oppId]);
-    addToast(`Successfully registered interest for: ${title}`, 'success');
+    addToast(`Interest noted for: ${title}`, 'success');
   };
 
   if (loading) {
@@ -47,6 +48,19 @@ export const AcademicianDashboard = () => {
       </DashboardLayout>
     );
   }
+
+  if (error || !profile) {
+    return (
+      <DashboardLayout>
+        <Card className="border-red-500/30 bg-red-500/5">
+          <h2 className="text-base font-semibold text-white">Academician dashboard unavailable</h2>
+          <p className="text-sm text-zinc-400 mt-2">{error || 'No profile data was returned by the server.'}</p>
+        </Card>
+      </DashboardLayout>
+    );
+  }
+
+  const trainingCount = opps.filter((opp) => opp.category === 'Faculty Development').length;
 
   return (
     <DashboardLayout>
@@ -78,7 +92,7 @@ export const AcademicianDashboard = () => {
           </div>
           <div>
             <span className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wider block">FDP Training</span>
-            <span className="text-xl font-bold text-white mt-0.5">3 Available</span>
+            <span className="text-xl font-bold text-white mt-0.5">{trainingCount} Available</span>
           </div>
         </Card>
       </div>
@@ -93,7 +107,11 @@ export const AcademicianDashboard = () => {
           </h3>
 
           <div className="space-y-4">
-            {opps.map((opp) => {
+            {opps.length === 0 ? (
+              <Card>
+                <p className="text-sm text-zinc-400">No collaboration opportunities are available right now.</p>
+              </Card>
+            ) : opps.map((opp) => {
               const isApplied = appliedIds.includes(opp.id);
               return (
                 <Card key={opp.id} className="space-y-4">
@@ -131,7 +149,11 @@ export const AcademicianDashboard = () => {
           </h3>
 
           <div className="space-y-4">
-            {collabs.map((col) => (
+            {collabs.length === 0 ? (
+              <Card>
+                <p className="text-sm text-zinc-400">No active partnerships are listed yet.</p>
+              </Card>
+            ) : collabs.map((col) => (
               <Card key={col.id} className="space-y-3 p-4">
                 <div className="flex justify-between items-start">
                   <Badge variant="info" className="text-[9px]">{col.type}</Badge>

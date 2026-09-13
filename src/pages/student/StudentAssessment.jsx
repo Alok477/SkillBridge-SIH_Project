@@ -10,6 +10,7 @@ import { ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadius
 import { 
   Play, CheckCircle2, XCircle, ChevronRight, ChevronLeft, 
   Clock, AlertTriangle, RefreshCw, BarChart2, Code2, HelpCircle, BookOpen
+  , History, TrendingUp
 } from 'lucide-react';
 
 export const StudentAssessment = () => {
@@ -22,20 +23,29 @@ export const StudentAssessment = () => {
   const [testStarted, setTestStarted] = useState(false);
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
   const [answers, setAnswers] = useState({});
-  const [timeLeft, setTimeLeft] = useState(1800); // 30 mins = 1800 seconds
+  const [questionTimeLeft, setQuestionTimeLeft] = useState(30);
   const [results, setResults] = useState(null);
   const [showDetailedReview, setShowDetailedReview] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [tabSwitchCount, setTabSwitchCount] = useState(0);
+  const [integrityWarning, setIntegrityWarning] = useState(false);
+  const [attemptId, setAttemptId] = useState(null);
+  const [assessmentHistory, setAssessmentHistory] = useState([]);
 
   useEffect(() => {
     fetchAssessment(selectedDomain);
   }, [selectedDomain]);
+
+  useEffect(() => {
+    studentService.getProfile().then(profile => setAssessmentHistory(profile.assessmentHistory || [])).catch(() => {});
+  }, []);
 
   const fetchAssessment = async (domain) => {
     setLoading(true);
     try {
       const data = await studentService.getAssessment(domain);
       setAssessment(data);
-      setTimeLeft(30 * 60); // Strictly 30 Minutes
+      setQuestionTimeLeft(30);
     } catch (err) {
       console.error(err);
     } finally {
@@ -43,28 +53,58 @@ export const StudentAssessment = () => {
     }
   };
 
-  // Timer effect
+  // Each question gets its own short window, which keeps the assessment paced and predictable.
   useEffect(() => {
-    if (!testStarted || results) return;
+    if (!testStarted || results || isSubmitting) return;
 
-    if (timeLeft <= 0) {
-      handleSubmit();
+    if (questionTimeLeft <= 0) {
+      if (currentQuestionIdx < (assessment?.questions?.length || 1) - 1) {
+        setCurrentQuestionIdx(prev => prev + 1);
+        setQuestionTimeLeft(30);
+      } else {
+        handleSubmit();
+      }
       return;
     }
 
     const timer = setInterval(() => {
-      setTimeLeft(prev => prev - 1);
+      setQuestionTimeLeft(prev => prev - 1);
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [testStarted, timeLeft, results]);
+  }, [testStarted, questionTimeLeft, currentQuestionIdx, assessment, results, isSubmitting]);
 
-  const handleStartTest = () => {
+  useEffect(() => {
+    if (!testStarted || results) return;
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'hidden') return;
+      setTabSwitchCount(previous => {
+        const nextCount = previous + 1;
+        setIntegrityWarning(true);
+        addToast(nextCount === 1 ? 'Please stay on the assessment tab. This switch was recorded.' : 'Assessment submitted after repeated tab switching.', nextCount === 1 ? 'warning' : 'error');
+        if (nextCount >= 2) handleSubmit();
+        return nextCount;
+      });
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [testStarted, results]);
+
+  const handleStartTest = async () => {
+    try {
+      const attempt = await studentService.startAssessment(assessment.questions.length);
+      setAttemptId(attempt.id);
+    } catch (err) {
+      addToast(err.message || 'Unable to start a secure assessment attempt.', 'error');
+      return;
+    }
     setTestStarted(true);
     setCurrentQuestionIdx(0);
     setAnswers({});
-    setTimeLeft(30 * 60);
-    addToast('30-Minute Skill Assessment Started. Good luck!', 'info');
+    setQuestionTimeLeft(30);
+    setTabSwitchCount(0);
+    setIntegrityWarning(false);
+    addToast('Assessment started. You have 30 seconds per question.', 'info');
   };
 
   const handleSelectOption = (questionId, optionIdx) => {
@@ -75,15 +115,20 @@ export const StudentAssessment = () => {
   };
 
   const handleSubmit = async () => {
+    if (isSubmitting || results) return;
+    setIsSubmitting(true);
     setLoading(true);
     try {
-      const evaluation = await studentService.submitAssessment(answers, assessment?.questions);
+      const evaluation = await studentService.submitAssessment(answers, assessment?.questions, attemptId, selectedDomain);
       setResults(evaluation);
+      const profile = await studentService.getProfile();
+      setAssessmentHistory(profile.assessmentHistory || []);
       addToast('Assessment submitted successfully!', 'success');
     } catch (err) {
       addToast(err.message || 'Submission failed', 'error');
     } finally {
       setLoading(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -92,7 +137,10 @@ export const StudentAssessment = () => {
     setAnswers({});
     setTestStarted(false);
     setCurrentQuestionIdx(0);
-    setTimeLeft(1800);
+    setQuestionTimeLeft(30);
+    setTabSwitchCount(0);
+    setIntegrityWarning(false);
+    setAttemptId(null);
     setShowDetailedReview(false);
   };
 
@@ -310,7 +358,7 @@ export const StudentAssessment = () => {
   if (!testStarted) {
     return (
       <DashboardLayout>
-        <div className="max-w-3xl mx-auto py-6 space-y-6">
+        <div className="mx-auto max-w-5xl py-6 space-y-6">
           <Card className="p-6 sm:p-8 space-y-6">
             <div className="text-center space-y-3">
               <div className="w-14 h-14 rounded-full bg-brand/10 border border-brand/20 flex items-center justify-center mx-auto text-brand">
@@ -370,6 +418,10 @@ export const StudentAssessment = () => {
               </Button>
             </div>
           </Card>
+          <Card className="space-y-5 border-brand/20 bg-gradient-to-br from-brand/10 via-[#121214] to-[#121214]">
+            <div className="flex items-center gap-2"><History className="h-5 w-5 text-brand" /><div><h2 className="text-lg font-bold text-white">Assessment history & analysis</h2><p className="mt-1 text-xs text-zinc-500">Review previous attempts, strengths, weak areas, and recommended next steps.</p></div></div>
+            {assessmentHistory.length ? <div className="space-y-3">{[...assessmentHistory].reverse().map((attempt, index) => <div key={attempt.id || attempt.createdAt || index} className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><div className="flex flex-wrap items-center gap-2"><Badge variant="brand">{attempt.domain || 'All domains'}</Badge><Badge variant={attempt.score >= 75 ? 'success' : attempt.score >= 50 ? 'warning' : 'danger'}>{attempt.score}%</Badge><span className="text-sm font-semibold text-white">Assessment attempt {assessmentHistory.length - index}</span></div><p className="mt-1 text-[11px] text-zinc-500">{attempt.createdAt ? new Date(attempt.createdAt).toLocaleString() : 'Previous attempt'} · {attempt.correctCount}/{attempt.totalCount} correct</p></div><div className="flex items-center gap-1 text-xs text-zinc-400"><TrendingUp className="h-3.5 w-3.5 text-brand" />{attempt.score >= 75 ? 'Strong performance' : 'Keep building fundamentals'}</div></div><div className="mt-3 grid gap-3 sm:grid-cols-3"><div><span className="text-[10px] font-semibold uppercase text-accent-green">Strengths</span><p className="mt-1 text-xs text-zinc-300">{(attempt.strengths || []).join(', ') || 'Not recorded'}</p></div><div><span className="text-[10px] font-semibold uppercase text-accent-amber">Focus areas</span><p className="mt-1 text-xs text-zinc-300">{(attempt.weakAreas || []).join(', ') || 'No focus areas recorded'}</p></div><div><span className="text-[10px] font-semibold uppercase text-brand">Recommended skills</span><p className="mt-1 text-xs text-zinc-300">{(attempt.recommendedSkills || []).join(', ') || 'No recommendations recorded'}</p></div></div>{Object.keys(attempt.skillScores || {}).length ? <div className="mt-3 flex flex-wrap gap-2 border-t border-zinc-800 pt-3">{Object.entries(attempt.skillScores).map(([skill, score]) => <span key={skill} className="rounded-full border border-brand/20 bg-brand/10 px-2.5 py-1 text-[10px] text-blue-200">{skill}: {score}%</span>)}</div> : null}</div>)}</div> : <div className="rounded-xl border border-dashed border-zinc-700 p-6 text-center text-sm text-zinc-500">No previous assessments yet. Complete your first assessment to start building your history.</div>}
+          </Card>
         </div>
       </DashboardLayout>
     );
@@ -381,7 +433,7 @@ export const StudentAssessment = () => {
   const currentQ = assessment.questions[currentQuestionIdx];
   const answeredCount = Object.keys(answers).length;
   const progressPct = Math.round(((currentQuestionIdx + 1) / assessment.questions.length) * 100);
-  const isTimeLow = timeLeft < 300; // less than 5 mins
+  const isTimeLow = questionTimeLeft <= 10;
 
   return (
     <DashboardLayout>
@@ -404,9 +456,17 @@ export const StudentAssessment = () => {
               : 'bg-accent-amber/10 border-accent-amber/30 text-accent-amber'
           }`}>
             <Clock className="w-4 h-4" />
-            <span>{formatTime(timeLeft)}</span>
+            <span>{formatTime(questionTimeLeft)}</span>
           </div>
         </div>
+
+        {integrityWarning && (
+          <div className="flex items-start gap-3 rounded-xl border border-accent-amber/30 bg-accent-amber/10 px-4 py-3 text-xs text-accent-amber">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>Tab switching is recorded for assessment integrity. Returning to another tab again will submit this attempt.</span>
+            <span className="ml-auto shrink-0 font-semibold">{tabSwitchCount}/2</span>
+          </div>
+        )}
 
         {/* Progress Bar */}
         <div className="w-full bg-zinc-800 h-1.5 rounded-full overflow-hidden">
@@ -429,7 +489,7 @@ export const StudentAssessment = () => {
                 <button
                   key={q.id}
                   type="button"
-                  onClick={() => setCurrentQuestionIdx(idx)}
+                  onClick={() => { setCurrentQuestionIdx(idx); setQuestionTimeLeft(30); }}
                   className={`w-7 h-7 rounded-lg border text-xs flex items-center justify-center transition-all ${btnStyle}`}
                 >
                   {idx + 1}
@@ -484,7 +544,7 @@ export const StudentAssessment = () => {
         {/* Question Navigation Controls */}
         <div className="flex justify-between items-center gap-4">
           <Button
-            onClick={() => setCurrentQuestionIdx(prev => Math.max(0, prev - 1))}
+            onClick={() => { setCurrentQuestionIdx(prev => Math.max(0, prev - 1)); setQuestionTimeLeft(30); }}
             disabled={currentQuestionIdx === 0}
             variant="outline"
             className="gap-1 text-xs"
@@ -498,7 +558,7 @@ export const StudentAssessment = () => {
 
           {currentQuestionIdx < assessment.questions.length - 1 ? (
             <Button
-              onClick={() => setCurrentQuestionIdx(prev => prev + 1)}
+              onClick={() => { setCurrentQuestionIdx(prev => prev + 1); setQuestionTimeLeft(30); }}
               className="gap-1 text-xs"
             >
               Next <ChevronRight className="w-4 h-4" />

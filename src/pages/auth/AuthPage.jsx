@@ -61,7 +61,7 @@ export const AuthPage = () => {
         await login(email, password, role);
         addToast('Signed in successfully!', 'success');
       }
-      navigate(`/${role}/dashboard`);
+      navigate(role === 'student' ? '/student/portfolio' : `/${role}/dashboard`);
     } catch (err) {
       const msg = err.message || 'Authentication failed';
       addToast(msg, 'error');

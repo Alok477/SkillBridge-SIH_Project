@@ -16,10 +16,12 @@ export const StudentDashboard = () => {
   const [profile, setProfile] = useState(null);
   const [opps, setOpps] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
       try {
+        setError('');
         const studentProfile = await studentService.getProfile();
         
         // If profile exists and student is not onboarded, redirect to survey
@@ -33,6 +35,7 @@ export const StudentDashboard = () => {
         setOpps(allOpps.slice(0, 2)); // Show top 2 matching ones
       } catch (err) {
         console.error(err);
+        setError(err.message || 'Unable to load your dashboard.');
       } finally {
         setLoading(false);
       }
@@ -56,7 +59,20 @@ export const StudentDashboard = () => {
     );
   }
 
+  if (error || !profile) {
+    return (
+      <DashboardLayout>
+        <Card className="mx-auto max-w-xl space-y-4 text-center">
+          <h2 className="text-lg font-bold text-white">Dashboard unavailable</h2>
+          <p className="text-sm text-zinc-400">{error || 'No profile data was returned.'}</p>
+          <Button onClick={() => window.location.reload()}>Try again</Button>
+        </Card>
+      </DashboardLayout>
+    );
+  }
+
   const skillCards = profile?.skills?.technical || [];
+  const softSkillCount = profile?.skills?.soft?.length || 0;
   const isLocked = profile?.assessmentCompleted === false;
 
   return (
@@ -94,7 +110,7 @@ export const StudentDashboard = () => {
             </Card>
             <Card>
               <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider block mb-1">Soft Skills</span>
-              <span className="text-xl font-bold text-white">2 Mapped</span>
+              <span className="text-xl font-bold text-white">{softSkillCount} Mapped</span>
               <p className="text-xs text-zinc-400 mt-2">Aptitude and collaboration</p>
             </Card>
             <Card>
@@ -171,7 +187,7 @@ export const StudentDashboard = () => {
               </h3>
 
               <div className="space-y-4">
-                {opps.map((opp) => (
+                {opps.length ? opps.map((opp) => (
                   <Card key={opp.id} hover onClick={() => navigate('/student/opportunities')} className="p-4 flex flex-col justify-between">
                     <div className="space-y-3">
                       <div className="flex justify-between items-start">
@@ -184,13 +200,13 @@ export const StudentDashboard = () => {
                       </div>
                     </div>
                     <div className="border-t border-zinc-800/60 mt-4 pt-3 flex justify-between items-center text-[10px] text-zinc-500">
-                      <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {opp.location.split(' (')[0]}</span>
+                      <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {(opp.location || 'Location not specified').split(' (')[0]}</span>
                       <span className="text-brand hover:underline flex items-center gap-0.5 cursor-pointer">
                         Apply <ArrowRight className="w-3.5 h-3.5" />
                       </span>
                     </div>
                   </Card>
-                ))}
+                )) : <Card><p className="text-sm text-zinc-500">No matching opportunities are available yet.</p></Card>}
               </div>
             </div>
 
