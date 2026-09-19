@@ -12,10 +12,10 @@ const reveal = {
 };
 
 const teamMembers = [
-  { name: 'Ajay Kumar', role: 'Team Leader & UI Innovation Evaluation Partner', focus: 'Product direction and coordination', icon: LayoutDashboard },
-  { name: 'Alok Kumar', role: 'Frontend Developer & Technical Lead', focus: 'Interface and user experience', icon: Code2 },
-  { name: 'Devang Kumar', role: 'Content Lead & Lead Presenter', focus: 'Database Management', icon: Database },
-  { name: 'Amit Raj', role: 'Backend Development', focus: 'APIs, authentication, and services', icon: GitBranch },
+  { name: 'Ajay Kumar', role: 'Team Leader', focus: 'Product direction and coordination', icon: LayoutDashboard },
+  { name: 'Alok Kumar', role: 'Fullstack Developer & Technical Lead', focus: 'Interface and user experience', icon: Code2 },
+  { name: 'Devang Kumar', role: 'Content Lead & Lead Presenter', focus: 'Product evaluation', icon: Database },
+  { name: 'Amit Raj', role: 'Architecture asessment', focus: 'APIs & services', icon: GitBranch },
   { name: 'Lara', role: 'Research and Data Analytics', focus: 'Data models and persistence', icon: FileText },
   { name: 'Dipanshu', role: 'Research, Presentation Designer & Co-Presenter', focus: 'Problem research and presentation', icon: Users }
 ];
